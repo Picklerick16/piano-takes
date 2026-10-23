@@ -21,6 +21,7 @@
   --accent: #1f5fbf;
   --accent-ink: #ffffff;
   --note: #2a66c9;
+  --lh: #12897a;
   --rec: #d0342c;
   --sel: rgba(232, 160, 32, 0.22);
   --sel-strong: #d98a0b;
@@ -34,13 +35,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #111318; --panel: #1a1d24; --ink: #e7e9ee; --muted: #9aa2b1; --line: #2d323c; --row-black: #161920;
-    --accent: #5b8ff0; --accent-ink: #0d1220; --note: #6c9cf5; --rec: #ff5a4f; --sel: rgba(240, 175, 50, 0.20);
+    --accent: #5b8ff0; --accent-ink: #0d1220; --note: #6c9cf5; --lh: #3cc4ad; --rec: #ff5a4f; --sel: rgba(240, 175, 50, 0.20);
     --sel-strong: #f0a92e; --ok: #46c27c; --warn: #e0a640; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #111318; --panel: #1a1d24; --ink: #e7e9ee; --muted: #9aa2b1; --line: #2d323c; --row-black: #161920;
-  --accent: #5b8ff0; --accent-ink: #0d1220; --note: #6c9cf5; --rec: #ff5a4f; --sel: rgba(240, 175, 50, 0.20);
+  --accent: #5b8ff0; --accent-ink: #0d1220; --note: #6c9cf5; --lh: #3cc4ad; --rec: #ff5a4f; --sel: rgba(240, 175, 50, 0.20);
   --sel-strong: #f0a92e; --ok: #46c27c; --warn: #e0a640; color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -147,6 +148,44 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
   .clock { font-size: 18px; }
   .work.split .roll-wrap { flex-basis: 38%; }
 }
+
+/* practice */
+.ptitle { font-weight: 600; font-size: 17px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pplan { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-block: 8px; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); font-size: 14px; }
+.pplan button { min-height: 36px; font-size: 14px; }
+.pplan .due { border-color: var(--warn); color: var(--warn); }
+.chips { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-block: 8px; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); align-items: center; }
+.chip { flex: none; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 54px; padding: 6px 12px; min-width: 92px; }
+.chip b { font-size: 14px; font-weight: 600; }
+.chip .st { font-size: 12px; color: var(--muted); }
+.chip .pb { width: 100%; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.chip .pb i { display: block; height: 100%; background: var(--accent); }
+.chip.due .st { color: var(--warn); font-weight: 600; }
+.chip.solid .st { color: var(--ok); }
+.chip.solid .pb i { background: var(--ok); }
+.chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.chips .size { flex: none; display: flex; align-items: center; gap: 6px; margin-left: 8px; }
+.pctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-block: 8px; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.pwork { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.psheet { flex: 0 0 40%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); border-bottom: 1px solid var(--line); padding: 4px 16px; position: relative; }
+.fall-wrap { flex: 1; min-height: 160px; position: relative; touch-action: none; }
+#fall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.result { position: absolute; top: 12px; right: max(12px, env(safe-area-inset-right, 0px)); width: min(400px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.22); padding: 16px; display: flex; flex-direction: column; gap: 12px; z-index: 5; }
+.rc-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.rc-head strong { font-size: 26px; font-variant-numeric: tabular-nums; }
+.badge { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; border: 1px solid currentColor; }
+.badge.pass { color: var(--ok); } .badge.fail { color: var(--warn); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px 12px; margin: 0; }
+.stats div { display: flex; flex-direction: column; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 0; font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; font-size: 14px; }
+.prog { margin: 0; font-size: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.result .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 
@@ -184,6 +223,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <input id="title" aria-label="Recording name" autocomplete="off" spellcheck="false">
       <span class="grow"></span>
       <span class="pill" data-midi-pill></span>
+      <button id="practiceBtn">Practice</button>
       <button id="sheetToggle" class="toggle" aria-pressed="false">Sheet music</button>
       <div class="menu-wrap">
         <button id="exportBtn">Export ▾</button>
@@ -251,6 +291,37 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <button id="clearSel" class="need-sel sq" aria-label="Clear selection">✕</button>
     </div>
     <p class="hint" id="hint">Drag in the time strip at the top to select · drag the edges to adjust · tap to move the playhead · drag the notes to scroll · pinch to zoom</p>
+  </section>
+
+
+  <section id="prac" class="screen" hidden>
+    <header class="bar">
+      <button id="pBack" class="ghost">‹ Library</button>
+      <div class="ptitle" id="pTitle"></div>
+      <span class="grow"></span>
+      <span class="pill" data-midi-pill></span>
+      <button id="pEdit">Open in editor</button>
+    </header>
+    <div class="pplan" id="pPlan"></div>
+    <div class="chips" id="pChips"></div>
+    <div class="pctl">
+      <div class="seg" id="pHands"><button data-h="R">Right hand</button><button data-h="L">Left hand</button><button data-h="B">Both</button></div>
+      <div class="seg" id="pMode"><button data-m="wait">Wait for me</button><button data-m="along">Play along</button></div>
+      <span class="edge"><span class="lab">Speed</span><button class="sq" id="pSlow" aria-label="Slower">−</button><output id="pSpeed">100%</output><button class="sq" id="pFast" aria-label="Faster">+</button></span>
+      <button id="pLoop" class="toggle" aria-pressed="false">Loop</button>
+      <button id="pOther" class="toggle" aria-pressed="true" title="The iPad plays the hand you are not practising">Other hand on iPad</button>
+      <button id="pNames" class="toggle" aria-pressed="true">Note names</button>
+      <button id="pSheet" class="toggle" aria-pressed="false">Sheet music</button>
+      <button id="pClick" class="toggle" aria-pressed="false" title="Metronome click in play-along mode">Click</button>
+      <span class="grow"></span>
+      <button id="pListen">▶ Listen</button>
+      <button id="pStart" class="primary">Start</button>
+    </div>
+    <div class="pwork">
+      <div class="psheet" id="pSheetBox" hidden><div id="pSheetOut"></div></div>
+      <div class="fall-wrap" id="fallWrap"><canvas id="fall" aria-label="Falling notes"></canvas><div class="result" id="pResult" hidden></div></div>
+    </div>
+    <p class="hint" id="pHint"></p>
   </section>
 
   <div id="toast" role="status" aria-live="polite"></div>
@@ -410,13 +481,14 @@ function pedalIntervals(it) {
 }
 function pedalStateAt(pedal, t) { let s = false; for (const e of pedal) { if (e.t <= t) s = e.on; else break; } return s; }
 // playable events: release time includes the sustain pedal
+function relTime(n, iv) {
+  const e = noteEnd(n); let off = e;
+  for (const [a, b] of iv) { if (e >= a && e < b) { off = b; break; } }
+  return Math.min(off, e + 15);
+}
 function buildEvents(it) {
   const iv = pedalIntervals(it);
-  return it.notes.map((n) => {
-    const e = noteEnd(n); let off = e;
-    for (const [a, b] of iv) { if (e >= a && e < b) { off = b; break; } }
-    return { t: n.t, p: n.p, v: n.v, off: Math.min(off, e + 15) };
-  }).sort((a, b) => a.t - b.t);
+  return it.notes.map((n) => ({ t: n.t, p: n.p, v: n.v, off: relTime(n, iv) })).sort((a, b) => a.t - b.t);
 }
 // remove [a,b] and close the gap
 function cutRange(it, a, b) {
@@ -433,6 +505,7 @@ function cutRange(it, a, b) {
   for (const e of it.pedal) if (e.t > b) ped.push({ t: e.t - L, on: e.on });
   it.notes = notes; it.pedal = ped;
   it.length = Math.max(a, it.length - L);
+  if (it.bars) it.bars = it.bars.filter((t) => t < a || t >= b).map((t) => (t >= b ? t - L : t));
   if (it.tempo) { if (it.tempo.offset >= b) it.tempo.offset -= L; else if (it.tempo.offset > a) it.tempo.offset = a; }
 }
 // keep only [a,b]
@@ -444,6 +517,7 @@ function keepRange(it, a, b) {
   for (const e of it.pedal) if (e.t > a && e.t < b) ped.push({ t: e.t - a, on: e.on });
   if (pedalStateAt(it.pedal, b)) ped.push({ t: b - a, on: false });
   it.notes = notes; it.pedal = ped; it.length = b - a;
+  if (it.bars) { const before = it.bars.filter((t) => t <= a); it.bars = [(before.length ? before[before.length - 1] : 0) - a, ...it.bars.filter((t) => t > a && t < b).map((t) => t - a)]; }
   if (it.tempo) { const bar = barLen(it.tempo); it.tempo.offset = (((it.tempo.offset - a) % bar) + bar) % bar; }
 }
 const beatLen = (tp) => 60 / tp.bpm;
@@ -473,7 +547,7 @@ function parseMidi(buf) {
   if (str(4) !== 'MThd') throw new Error('This is not a MIDI file.');
   const hl = u32(); u16(); const ntr = u16(); const div = u16(); p = 8 + hl;
   if (div & 0x8000) throw new Error('This MIDI file uses a timing format that is not supported.');
-  const tempos = [], tracks = []; let ts = null;
+  const tempos = [], tracks = [], tsl = []; let ts = null;
   for (let t = 0; t < ntr && p < d.byteLength - 8; t++) {
     let id = str(4), len = u32();
     while (id !== 'MTrk' && p + len < d.byteLength) { p += len; id = str(4); len = u32(); }
@@ -484,7 +558,7 @@ function parseMidi(buf) {
       if (st === 0xff) {
         const type = u8(); const l = vlq();
         if (type === 0x51 && l === 3) tempos.push({ tick, us: (d.getUint8(p) << 16) | (d.getUint8(p + 1) << 8) | d.getUint8(p + 2) });
-        if (type === 0x58 && !ts) ts = { num: d.getUint8(p), den: 1 << d.getUint8(p + 1) };
+        if (type === 0x58) { const x = { tick, num: d.getUint8(p), den: 1 << d.getUint8(p + 1) }; tsl.push(x); if (!ts) ts = x; }
         p += l;
       } else if (st === 0xf0 || st === 0xf7) { p += vlq(); }
       else { const hi = st & 0xf0; const a = u8(); const b = (hi === 0xc0 || hi === 0xd0) ? 0 : u8(); evs.push({ tick, hi, ch: st & 15, a, b }); }
@@ -519,7 +593,16 @@ function parseMidi(buf) {
   pedal.sort((a, b) => a.t - b.t);
   const ped = []; for (const e of pedal) if (!ped.length || ped[ped.length - 1].on !== e.on) ped.push(e);
   const beats = ts && ts.den === 4 && [2, 3, 4].includes(ts.num) ? ts.num : 4;
-  return { notes, pedal: ped, tempo: { bpm: Math.round(60e6 / tempos[0].us), beats, offset: 0, metro: false } };
+  // bar start times, following tempo and time-signature changes
+  tsl.sort((a, b) => a.tick - b.tick);
+  const lastEnd = notes.length ? Math.max(...notes.map((n) => n.t + n.d)) : 0; const bars = [];
+  for (let tick = 0, k = 0; bars.length < 5000; ) {
+    while (k < tsl.length && tsl[k].tick <= tick) k++;
+    const cur = k ? tsl[k - 1] : { num: 4, den: 4 };
+    const sec = toSec(tick); if (sec > lastEnd + 0.01) break; bars.push(sec);
+    tick += Math.max(1, Math.round(div * 4 * cur.num / cur.den));
+  }
+  return { notes, pedal: ped, bars, tempo: { bpm: Math.round(60e6 / tempos[0].us), beats, offset: 0, metro: false } };
 }
 function writeMidi(it) {
   const ppq = 480; const tp = it.tempo || { bpm: 120, beats: 4, offset: 0 };
@@ -712,10 +795,11 @@ function noteOn(p, v, ts) {
   live.set(p, v);
   if (settings.monitor) { const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.out, c.currentTime, p, v, c.currentTime + 30)); }
   if (rec && (rec.state === 'rec' || rec.state === 'countin')) rec.held.set(p, { p, v, t: Math.max(rec.base, recTime(ts)) });
+  if (P && P.run) practiceNoteOn(p, v, ts);
   dirty();
 }
 function noteOff(p, ts) {
-  live.delete(p);
+  live.delete(p); if (P) P.keyState.delete(p);
   const vc = monitorVoices.get(p);
   if (vc) { if (livePedal) pedalHeld.add(p); else { Piano.release(vc, Piano.ctx.currentTime); monitorVoices.delete(p); } }
   if (rec && rec.held.has(p)) { const h = rec.held.get(p); rec.held.delete(p); const t = Math.max(rec.base, recTime(ts)); cur.item.notes.push({ p: h.p, v: h.v, t: h.t, d: Math.max(0.01, t - h.t) }); }
@@ -810,7 +894,7 @@ function stopPlayback(natural) {
 }
 
 /* ---------------- undo / save ---------------- */
-const snap = (it) => JSON.stringify({ notes: it.notes, pedal: it.pedal, length: it.length, tempo: it.tempo, split: it.split });
+const snap = (it) => JSON.stringify({ notes: it.notes, pedal: it.pedal, length: it.length, tempo: it.tempo, split: it.split, bars: it.bars || null });
 const undoTop = () => cur.undo[cur.undo.length - 1];
 function pushUndo() { cur.undo.push(snap(cur.item)); if (cur.undo.length > 60) cur.undo.shift(); cur.redo = []; }
 function restore(s) { Object.assign(cur.item, JSON.parse(s)); }
@@ -845,23 +929,25 @@ function renderList() {
     const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = it.name;
     if (it.kind === 'piece') { const k = document.createElement('span'); k.className = 'kind'; k.textContent = 'Piece'; nm.appendChild(k); }
     const len = document.createElement('div'); len.className = 'meta'; len.textContent = fmt(it.length).replace(/\.\d+$/, '');
-    const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = df.format(it.updated) + ' · ' + it.notes.length + ' notes';
+    const meta = document.createElement('div'); meta.className = 'meta'; const due = it.kind === 'piece' ? dueCount(it) : 0;
+    meta.textContent = df.format(it.updated) + ' · ' + it.notes.length + ' notes' + (due ? ' · ' + due + ' to review today' : '');
     li.append(nm, len, meta);
-    li.onclick = () => openItem(it);
-    li.onkeydown = (e) => { if (e.key === 'Enter') openItem(it); };
+    const open = () => (it.kind === 'piece' ? openPractice(it) : openItem(it));
+    li.onclick = open;
+    li.onkeydown = (e) => { if (e.key === 'Enter') open(); };
     ul.appendChild(li);
   }
 }
 function openItem(it) {
   if (!it.split) it.split = 60;
   cur = { item: it, undo: [], redo: [], sel: null, playhead: 0, view: { x0: 0, pps: 60 }, drag: null };
-  $('#lib').hidden = true; $('#ses').hidden = false; $('#title').value = it.name;
+  if (P) closePracticeQuiet(); showScreen('ses'); $('#title').value = it.name;
   sizeCanvas(); zoomFit(); updateUI(); renderSheetSoon(); dirty();
 }
 async function closeSession() {
   if (rec) pauseRecording(true); stopPlayback();
   clearTimeout(saveTimer); if (cur) await DB.put(cur.item).catch(() => {});
-  cur = null; $('#ses').hidden = true; $('#lib').hidden = false; loadLibrary();
+  cur = null; showScreen('lib'); loadLibrary();
 }
 
 /* ---------------- UI state ---------------- */
@@ -911,7 +997,7 @@ async function requestWake(on) {
 const cv = $('#roll'); const g = cv.getContext('2d');
 const KW = 46, RH = 40;     // keyboard width, ruler height (css px)
 let W = 0, H = 0, colors = {}, needDraw = true;
-function readColors() { const cs = getComputedStyle(document.documentElement); for (const k of ['bg', 'panel', 'ink', 'muted', 'line', 'row-black', 'accent', 'note', 'rec', 'sel', 'sel-strong']) colors[k] = cs.getPropertyValue('--' + k).trim(); }
+function readColors() { const cs = getComputedStyle(document.documentElement); for (const k of ['bg', 'panel', 'ink', 'muted', 'line', 'row-black', 'accent', 'note', 'rec', 'sel', 'sel-strong', 'lh', 'ok', 'warn']) colors[k] = cs.getPropertyValue('--' + k).trim(); }
 function sizeCanvas() {
   const r = $('#rollWrap').getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
   W = Math.max(1, r.width); H = Math.max(1, r.height);
@@ -1046,7 +1132,8 @@ function draw() {
 }
 function frame() {
   if (rec && rec.state === 'countin' && recTime(performance.now()) >= rec.base) { rec.state = 'rec'; updateUI(); }
-  if (needDraw || play || (rec && rec.state !== 'paused')) { needDraw = false; draw(); }
+  if (P && !$('#prac').hidden) { tickRun(); if (needDraw || P.run) { needDraw = false; drawFall(); } }
+  else if (needDraw || play || (rec && rec.state !== 'paused')) { needDraw = false; draw(); }
   requestAnimationFrame(frame);
 }
 
@@ -1157,6 +1244,389 @@ async function sheetPng() {
   return new Promise((res) => c.toBlob(res, 'image/png'));
 }
 
+/* ---------------- practice & coach ---------------- */
+// Each section climbs this ladder; a step passes at 90% clean. Learned sections come back for review on a growing schedule.
+const LADDER = [
+  { hands: 'R', mode: 'wait', speed: 0, label: 'Right hand, wait for me' },
+  { hands: 'L', mode: 'wait', speed: 0, label: 'Left hand, wait for me' },
+  { hands: 'B', mode: 'wait', speed: 0, label: 'Both hands, wait for me' },
+  { hands: 'B', mode: 'along', speed: 0.6, label: 'Both hands, play along at 60%' },
+  { hands: 'B', mode: 'along', speed: 0.8, label: 'Both hands, play along at 80%' },
+  { hands: 'B', mode: 'along', speed: 1, label: 'Both hands, play along at full speed' },
+];
+const REVIEW_DAYS = [0, 1, 2, 4, 7, 14, 30, 60, 120];
+const DAY = 86400000;
+const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+settings.pr = Object.assign({ hands: 'R', mode: 'wait', speed: 1, loop: false, names: true, sheet: false, click: false, other: true, size: 4 }, settings.pr || {});
+const PR = settings.pr;
+let P = null;   // practice session: { item, bars, iv, sec, link, drill, range, run, keyState, loopToken }
+const handOf = (it, n) => n.h || (n.p >= (it.split || 60) ? 'R' : 'L');
+function barStarts(it) {
+  if (it.bars && it.bars.length) return it.bars;
+  const tp = it.tempo || { bpm: 120, beats: 4, offset: 0 }; const bl = barLen(tp);
+  let t = tp.offset; while (t > 1e-6) t -= bl;
+  const out = []; for (; t < it.length - 1e-6 && out.length < 5000; t += bl) out.push(t);
+  return out.length ? out : [0];
+}
+function barAt(bars, t) { let lo = 0, hi = bars.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (bars[m] <= t + 1e-6) lo = m; else hi = m - 1; } return lo; }
+const secCount = (bars) => Math.max(1, Math.ceil(bars.length / PR.size));
+function secRange(it, bars, i) { const b0 = i * PR.size, b1 = Math.min(bars.length, b0 + PR.size); return [bars[b0], b1 < bars.length ? bars[b1] : it.length]; }
+const secLabel = (bars, i) => { const b0 = i * PR.size + 1, b1 = Math.min(bars.length, (i + 1) * PR.size); return b0 === b1 ? 'Bar ' + b0 : 'Bars ' + b0 + '–' + b1; };
+function secState(it, i) {
+  const pr = it.practice || (it.practice = {}); const k = PR.size + ':' + i * PR.size;
+  return pr[k] || (pr[k] = { step: 0, level: 0, due: 0, last: 0, runs: 0 });
+}
+function handsIn(it, bars, i) {
+  const [a, b] = secRange(it, bars, i); const h = { R: false, L: false };
+  for (const n of it.notes) if (n.t >= a - 1e-6 && n.t < b - 1e-6) h[handOf(it, n)] = true;
+  return h;
+}
+function normStep(it, bars, i, s) {
+  const h = handsIn(it, bars, i); const both = h.R && h.L;
+  while (s.step < LADDER.length && LADDER[s.step].hands !== 'B' && !both) s.step++;
+  return s;
+}
+const learned = (s) => s.step >= LADDER.length;
+const isDue = (s) => learned(s) && s.due <= today();
+function planFor(it, bars) {
+  const due = [], n = secCount(bars); let next = null;
+  for (let i = 0; i < n; i++) { const s = normStep(it, bars, i, secState(it, i)); if (isDue(s)) due.push(i); else if (!learned(s) && next == null) next = i; }
+  return { due, next };
+}
+function dueCount(it) { if (!it.notes.length) return 0; return planFor(it, barStarts(it)).due.length; }
+
+function showScreen(name) { for (const id of ['lib', 'ses', 'prac']) $('#' + id).hidden = id !== name; }
+function openPractice(it) {
+  if (!it.split) it.split = 60;
+  if (rec) pauseRecording(true); if (play) stopPlayback();
+  P = { item: it, bars: barStarts(it), iv: pedalIntervals(it), sec: 0, link: false, drill: null, range: [0, 0], run: null, keyState: new Map(), loopToken: 0 };
+  const plan = planFor(it, P.bars);
+  showScreen('prac'); $('#pTitle').textContent = it.name;
+  sizeFall(); selectSection(plan.due.length ? plan.due[0] : plan.next != null ? plan.next : 0);
+}
+function closePractice() { stopRun(); if (P) DB.put(P.item).catch(() => {}); P = null; showScreen('lib'); loadLibrary(); }
+function selectSection(i, keepPrefs) {
+  stopRun(); const it = P.item; P.sec = i; P.drill = null;
+  P.range = P.link && i > 0 ? [secRange(it, P.bars, i - 1)[0], secRange(it, P.bars, i)[1]] : secRange(it, P.bars, i);
+  if (!keepPrefs && !P.link) {
+    const s = normStep(it, P.bars, i, secState(it, i));
+    if (isDue(s)) { PR.hands = 'B'; PR.mode = 'along'; PR.speed = Math.max(PR.speed, 0.8); }
+    else if (!learned(s)) { const st = LADDER[s.step]; PR.hands = st.hands; PR.mode = st.mode; if (st.mode === 'along') PR.speed = st.speed; }
+    saveSettings();
+  }
+  $('#pResult').hidden = true; renderChips(); renderPlan(); updatePUI(); renderPSheet(); dirty();
+}
+function drillBar(k) {
+  stopRun(); P.drill = k; P.range = [P.bars[k], k + 1 < P.bars.length ? P.bars[k + 1] : P.item.length];
+  $('#pResult').hidden = true; renderChips(); updatePUI(); renderPSheet(); dirty();
+}
+function renderChips() {
+  const it = P.item; const box = $('#pChips'); box.innerHTML = ''; const n = secCount(P.bars);
+  for (let i = 0; i < n; i++) {
+    const s = normStep(it, P.bars, i, secState(it, i)); const b = document.createElement('button');
+    b.className = 'chip' + (isDue(s) ? ' due' : learned(s) ? ' solid' : '');
+    b.setAttribute('aria-pressed', String(P.drill == null && P.sec === i));
+    const days = learned(s) ? Math.max(0, Math.round((s.due - today()) / DAY)) : 0;
+    const st = isDue(s) ? 'Review due' : learned(s) ? 'Solid · review in ' + days + 'd' : s.step === 0 && !s.runs ? 'New' : 'Step ' + (s.step + 1) + ' of ' + LADDER.length;
+    b.innerHTML = '<b></b><span class="st"></span><span class="pb"><i></i></span>';
+    b.querySelector('b').textContent = secLabel(P.bars, i); b.querySelector('.st').textContent = st;
+    b.querySelector('i').style.width = (learned(s) ? 100 : (s.step / LADDER.length) * 100) + '%';
+    b.onclick = () => selectSection(i);
+    box.appendChild(b);
+  }
+  const size = document.createElement('div'); size.className = 'size';
+  size.innerHTML = '<span class="lab">Section size</span><div class="seg"><button data-s="2">2</button><button data-s="4">4</button><button data-s="8">8</button></div><button id="pLink" class="toggle">Join with previous</button>';
+  size.querySelectorAll('[data-s]').forEach((x) => { x.setAttribute('aria-pressed', String(+x.dataset.s === PR.size)); x.onclick = () => { PR.size = +x.dataset.s; saveSettings(); const p = planFor(P.item, P.bars); selectSection(p.due[0] ?? p.next ?? 0); }; });
+  const link = size.querySelector('#pLink'); link.setAttribute('aria-pressed', String(P.link)); link.disabled = P.sec === 0 && !P.link;
+  link.title = 'Practise this section together with the one before it, so the seam between them gets practised too';
+  link.onclick = () => { P.link = !P.link; selectSection(P.sec, true); };
+  box.appendChild(size);
+  const on = box.querySelector('[aria-pressed="true"].chip'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+function renderPlan() {
+  const it = P.item; const plan = planFor(it, P.bars); const box = $('#pPlan'); box.innerHTML = '';
+  const lab = document.createElement('span'); lab.className = 'lab'; lab.textContent = 'Today'; box.appendChild(lab);
+  if (!plan.due.length && plan.next == null) { const t = document.createElement('span'); t.textContent = 'Every section is learned and nothing is due. Play the whole piece, or come back tomorrow.'; box.appendChild(t); return; }
+  for (const i of plan.due) { const b = document.createElement('button'); b.className = 'due'; b.textContent = 'Review ' + secLabel(P.bars, i); b.onclick = () => selectSection(i); box.appendChild(b); }
+  if (plan.next != null) {
+    const s = secState(it, plan.next); const b = document.createElement('button');
+    b.textContent = (plan.due.length ? 'then ' : '') + (s.step || s.runs ? 'Continue ' : 'Start ') + secLabel(P.bars, plan.next); b.onclick = () => selectSection(plan.next); box.appendChild(b);
+  }
+  const t = document.createElement('span'); t.className = 'loading';
+  t.textContent = plan.due.length ? 'Reviews first: they take a minute and stop old sections from fading.' : ''; box.appendChild(t);
+}
+function updatePUI() {
+  if (!P) return;
+  $$('#pHands button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.h === PR.hands)));
+  $$('#pMode button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.m === PR.mode)));
+  $('#pSpeed').textContent = Math.round(PR.speed * 100) + '%';
+  $('#pLoop').setAttribute('aria-pressed', String(PR.loop)); $('#pNames').setAttribute('aria-pressed', String(PR.names));
+  $('#pSheet').setAttribute('aria-pressed', String(PR.sheet)); $('#pClick').setAttribute('aria-pressed', String(PR.click));
+  $('#pOther').setAttribute('aria-pressed', String(PR.other)); $('#pOther').disabled = PR.hands === 'B';
+  $('#pClick').disabled = PR.mode !== 'along';
+  $('#pSheetBox').hidden = !PR.sheet;
+  const running = !!P.run;
+  $('#pStart').textContent = running && P.run.mode !== 'listen' ? '■ Stop' : 'Start';
+  $('#pListen').textContent = running && P.run.mode === 'listen' ? '■ Stop' : '▶ Listen';
+  $('#pStart').disabled = running && P.run.mode === 'listen'; $('#pListen').disabled = running && P.run.mode !== 'listen';
+  $$('#pHands button, #pMode button, #pSlow, #pFast, #pChips button').forEach((b) => { if (running) b.disabled = true; else if (b.id !== 'pLink') b.disabled = false; });
+  // the coach line under the falling notes
+  let h;
+  if (P.drill != null) h = 'Drilling bar ' + (P.drill + 1) + '. Loop it until it’s clean, then tap its section above to go back.';
+  else if (P.link) h = 'Practising ' + secLabel(P.bars, P.sec - 1) + ' and ' + secLabel(P.bars, P.sec) + ' together. Runs here don’t move the ladder; they train the join.';
+  else {
+    const s = normStep(P.item, P.bars, P.sec, secState(P.item, P.sec)); const lab = secLabel(P.bars, P.sec);
+    if (isDue(s)) h = 'Review due for ' + lab + ': both hands, play along, at 80% speed or faster. Pass with 90% to push the next review further out.';
+    else if (learned(s)) h = lab + ' is learned. It comes back for review in ' + Math.max(1, Math.round((s.due - today()) / DAY)) + ' day(s). Playing it now is fine but doesn’t change the schedule.';
+    else h = 'Step ' + (s.step + 1) + ' of ' + LADDER.length + ' for ' + lab + ': ' + LADDER[s.step].label + '. Pass with 90% clean notes to unlock the next step.';
+  }
+  $('#pHint').textContent = h;
+}
+function renderPSheet() {
+  if (!P || !PR.sheet || !window.ABCJS) return;
+  const it = P.item; const [a, b] = P.range; const notes = it.notes.filter((n) => n.t >= a - 1e-6 && n.t < b - 1e-6);
+  const el = $('#pSheetOut');
+  if (!notes.length) { el.innerHTML = '<p class="empty">No notes in these bars.</p>'; return; }
+  const k = barAt(P.bars, a); const bd = (k + 1 < P.bars.length ? P.bars[k + 1] : it.length) - P.bars[k];
+  const beats = (it.tempo && it.tempo.beats) || 4;
+  const tmp = { name: '', notes: notes.map((n) => ({ ...n, t: n.t - P.bars[k], h: handOf(it, n) })), split: it.split, tempo: { bpm: 60 * beats / (bd || 2), beats, offset: 0 } };
+  try {
+    const abc = buildAbc(tmp).abc.replace(/^T:.*\n/m, '').replace(/^Q:.*\n/m, '').replace('V:L clef=bass\n', 'V:L clef=bass\n%%setbarnb ' + (k + 1) + '\n');
+    ABCJS.renderAbc(el, abc, { responsive: "resize", staffwidth: 1300, paddingtop: 0, paddingbottom: 0, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
+  } catch (e) { el.innerHTML = '<p class="empty">Could not write these bars out.</p>'; }
+}
+
+/* a run: wait-for-me, play-along or listen */
+function startRun(listen) {
+  stopRun(); const c = Piano.ensure(); const it = P.item; const [a, b] = P.range; const sp = PR.speed;
+  const notes = it.notes.filter((n) => n.t >= a - 1e-6 && n.t < b - 1e-6).map((n) => ({ ...n, hand: handOf(it, n), off: relTime(n, P.iv), hit: false, miss: false, ok: true }));
+  const mineSet = listen ? new Set() : new Set(notes.filter((n) => PR.hands === 'B' || n.hand === PR.hands));
+  const mine = notes.filter((n) => mineSet.has(n));
+  const auto = notes.filter((n) => !mineSet.has(n) && (listen || PR.other));
+  const mode = listen ? 'listen' : PR.mode;
+  const steps = [];
+  if (mode === 'wait') for (const n of mine) {
+    const last = steps[steps.length - 1];
+    if (last && n.t - last.t < 0.035) { last.ps.add(n.p); last.notes.push(n); } else steps.push({ t: n.t, ps: new Set([n.p]), got: new Set(), notes: [n], clean: true, wait: 0 });
+  }
+  const beats = []; const bpb = (it.tempo && it.tempo.beats) || 4;
+  for (let k = barAt(P.bars, a); k < P.bars.length && P.bars[k] < b; k++) {
+    const s0 = P.bars[k], s1 = k + 1 < P.bars.length ? P.bars[k + 1] : it.length;
+    for (let j = 0; j < bpb; j++) beats.push({ t: s0 + (s1 - s0) * j / bpb, acc: j === 0 });
+  }
+  const lead = 1.6;  // seconds of falling notes before the first bar
+  const now = performance.now();
+  P.run = { mode, a, b, notes, mine, auto, steps, si: 0, ai: 0, ci: 0, beats, wrong: 0, wrongAt: [], voices: [],
+    t0: a - lead * sp, perf0: now, songT: a - lead * sp, last: now, endT: steps.length ? steps[steps.length - 1].t + 0.4 : b };
+  P.keyState.clear(); $('#pResult').hidden = true; updatePUI(); dirty();
+}
+function stopRun() {
+  if (!P || !P.run) return; P.loopToken++;
+  const c = Piano.ctx; if (c) for (const v of P.run.voices) Piano.release(v, c.currentTime);
+  P.run = null; updatePUI(); dirty();
+}
+function tickRun() {
+  const r = P.run; if (!r) return; const c = Piano.ctx; const sp = PR.speed; const now = performance.now();
+  if (r.mode === 'wait') {
+    const dt = Math.min(0.1, (now - r.last) / 1000); r.last = now;
+    let nt = r.songT + dt * sp; const st = r.steps[r.si];
+    if (st && nt > st.t) { if (r.songT >= st.t - 1e-9) st.wait += dt; nt = Math.max(r.songT, st.t); }
+    r.songT = nt;
+    while (r.ai < r.auto.length && r.auto[r.ai].t <= r.songT) { const n = r.auto[r.ai++]; const w = c.currentTime; r.voices.push(Piano.voice(c, Piano.out, w, n.p, n.v, w + (n.off - n.t) / sp)); }
+    if (r.si >= r.steps.length && r.songT >= r.endT) finishRun();
+  } else {
+    r.songT = r.t0 + (now - r.perf0) / 1000 * sp;
+    while (r.ai < r.auto.length && r.auto[r.ai].t <= r.songT + 0.15 * sp) {
+      const n = r.auto[r.ai++]; if (n.t < r.songT - 0.05) continue;
+      const w = c.currentTime + Math.max(0, (n.t - r.songT) / sp); r.voices.push(Piano.voice(c, Piano.out, w, n.p, n.v, w + (n.off - n.t) / sp));
+    }
+    if (PR.click && r.mode === 'along') while (r.ci < r.beats.length && r.beats[r.ci].t <= r.songT + 0.15 * sp) {
+      const bt = r.beats[r.ci++]; if (bt.t >= r.songT - 0.02) Piano.click(c.currentTime + Math.max(0, (bt.t - r.songT) / sp), bt.acc);
+    }
+    const win = 0.18 * sp;
+    for (const n of r.mine) if (!n.hit && !n.miss && n.t < r.songT - win) n.miss = true;
+    if (r.songT >= r.b + 0.3) finishRun();
+  }
+  r.voices = r.voices.filter((v) => v.end > c.currentTime);
+}
+function practiceNoteOn(p, v, ts) {
+  const r = P && P.run; if (!r || r.mode === 'listen') return;
+  if (r.mode === 'wait') {
+    const st = r.steps[r.si]; if (!st) return;
+    if (st.ps.has(p)) {
+      st.got.add(p); P.keyState.set(p, 'ok');
+      if (st.got.size === st.ps.size) { r.si++; r.songT = Math.max(r.songT, st.t); st.notes.forEach((n) => { n.hit = true; n.ok = st.clean; }); }
+    } else { r.wrong++; st.clean = false; r.wrongAt.push(st.t); P.keyState.set(p, 'bad'); }
+  } else {
+    const sp = PR.speed; const t = r.t0 + (ts - r.perf0) / 1000 * sp; const win = 0.18 * sp; let best = null;
+    for (const n of r.mine) { if (n.hit || n.p !== p) continue; const d = Math.abs(n.t - t); if (d <= win && (!best || d < Math.abs(best.t - t))) best = n; }
+    if (best) { best.hit = true; best.miss = false; best.offMs = (t - best.t) / sp * 1000; best.pv = v; P.keyState.set(p, 'ok'); }
+    else { r.wrong++; r.wrongAt.push(t); P.keyState.set(p, 'bad'); }
+  }
+  dirty();
+}
+function evaluate(r) {
+  const bars = P.bars; const per = new Map(); const add = (t, x) => { const k = barAt(bars, t); per.set(k, (per.get(k) || 0) + x); };
+  const res = { mode: r.mode, wrong: r.wrong };
+  if (r.mode === 'wait') {
+    res.N = r.steps.length; const clean = r.steps.filter((s) => s.clean).length; res.acc = res.N ? clean / res.N : 1;
+    res.waitTotal = r.steps.reduce((x, s) => x + s.wait, 0);
+    r.steps.forEach((s) => add(s.t, s.wait + (s.clean ? 0 : 1.5)));
+    res.pass = res.N > 0 && res.acc >= 0.9;
+  } else {
+    res.N = r.mine.length; const hits = r.mine.filter((n) => n.hit); res.missed = res.N - hits.length;
+    res.acc = res.N ? hits.length / res.N : 1; res.wrongRate = res.N ? r.wrong / res.N : 0;
+    const offs = hits.map((n) => n.offMs); res.mean = offs.length ? offs.reduce((x, y) => x + y, 0) / offs.length : 0;
+    res.sd = offs.length > 1 ? Math.sqrt(offs.reduce((x, y) => x + (y - res.mean) ** 2, 0) / offs.length) : 0;
+    const vs = hits.map((n) => n.pv); const vm = vs.length ? vs.reduce((x, y) => x + y, 0) / vs.length : 0;
+    res.velSd = vs.length > 3 ? Math.sqrt(vs.reduce((x, y) => x + (y - vm) ** 2, 0) / vs.length) : 0;
+    r.mine.forEach((n) => { if (!n.hit) add(n.t, 1); }); r.wrongAt.forEach((t) => add(t, 1));
+    res.pass = res.N > 0 && res.acc >= 0.9 && res.wrongRate <= 0.1 && Math.abs(res.mean) < 90;
+  }
+  let worst = null; for (const [k, x] of per) if (x >= (r.mode === 'wait' ? 1 : 2) && (!worst || x > worst.x)) worst = { k, x };
+  res.weakBar = worst ? worst.k : null;
+  return res;
+}
+function coachTips(res) {
+  const t = []; const pct = (x) => Math.round(x * 100) + '%';
+  if (!res.N) return ['There are no notes for this hand in these bars. Pick the other hand or Both.'];
+  if (res.mode === 'wait') {
+    if (res.acc < 0.7) t.push('Many wrong keys. Before each chord, look at the next two or three notes and name them, then press. Wait mode waits, so slow is fine; wrong is what slows learning.');
+    else if (!res.pass) t.push('Close. Play it again and aim for zero wrong keys rather than speed.');
+    if (res.weakBar != null) t.push('Bar ' + (res.weakBar + 1) + ' cost you the most time. Drill that bar on its own three times, then play the whole section again.');
+    if (res.pass && res.waitTotal > res.N * 0.5) t.push('Clean, but with long pauses. Before moving on, play it once more and try to keep the notes falling without stopping.');
+  } else {
+    if (res.acc < 0.75) t.push('Too many missed notes at ' + pct(PR.speed) + '. Go down to ' + pct(Math.max(0.3, PR.speed - 0.2)) + ', or back to wait mode for a few runs.');
+    if (res.mean > 45) t.push('You’re late by about ' + Math.round(res.mean) + ' ms on average. Listen to the other hand or turn the click on, and let it lead you.');
+    if (res.mean < -45) t.push('You’re rushing ahead by about ' + Math.round(-res.mean) + ' ms. Turn the click on and sit on the beat instead of ahead of it.');
+    if (res.sd > 70) t.push('Your timing is uneven (spread of about ±' + Math.round(res.sd) + ' ms). Loop this at a lower speed with the click on until it feels boring.');
+    if (res.velSd > 18) t.push('Loudness jumps around between notes. In runs, try to make every note equally loud before adding expression.');
+    if (res.weakBar != null) t.push('Most mistakes were in bar ' + (res.weakBar + 1) + '. Drill it on its own, then rejoin the section.');
+    if (res.pass && !t.length) t.push(PR.speed < 1 ? 'Clean and steady. Push the speed up 10% next time.' : 'Clean, steady and at full speed. This is ready.');
+  }
+  return t.slice(0, 3);
+}
+function applyProgress(res) {
+  const out = { advanced: false, msg: '' };
+  if (P.drill != null || P.link || res.mode === 'listen') return out;
+  const it = P.item; const s = normStep(it, P.bars, P.sec, secState(it, P.sec)); s.runs++; s.last = Date.now();
+  if (!learned(s)) {
+    const st = LADDER[s.step];
+    const matches = PR.hands === st.hands && PR.mode === st.mode && (st.mode === 'wait' || PR.speed >= st.speed - 1e-6);
+    if (!matches) out.msg = 'This run used other settings than step ' + (s.step + 1) + ' (' + st.label + '), so the ladder didn’t move.';
+    else if (res.pass) {
+      s.step++; normStep(it, P.bars, P.sec, s); out.advanced = true;
+      if (learned(s)) { s.level = 1; s.due = today() + REVIEW_DAYS[1] * DAY; out.msg = 'Section learned. It comes back for a quick review tomorrow, then after 2, 4, 7, 14 and 30 days. Those reviews are what make it stick.'; }
+      else out.msg = 'Step passed. Next: ' + LADDER[s.step].label + '.';
+    } else out.msg = 'Not passed yet: you need 90% for this step.';
+  } else if (isDue(s)) {
+    if (PR.hands === 'B' && PR.mode === 'along' && PR.speed >= 0.8) {
+      if (res.pass) { s.level = Math.min(REVIEW_DAYS.length - 1, s.level + 1); s.due = today() + REVIEW_DAYS[s.level] * DAY; out.advanced = true; out.msg = 'Review passed. Next review in ' + REVIEW_DAYS[s.level] + ' days.'; }
+      else if (res.acc < 0.7) { s.step = 2; s.level = 0; out.msg = 'This section has faded. It goes back to step 3 (both hands, wait for me) to relearn it; that’s quicker than the first time.'; }
+      else { s.level = Math.max(1, s.level - 1); s.due = today() + DAY; out.msg = 'Not quite. It comes back tomorrow.'; }
+    } else out.msg = 'Reviews count only with both hands, play along, at 80% or faster.';
+  }
+  DB.put(it).catch(() => {}); renderChips(); renderPlan(); updatePUI();
+  return out;
+}
+function finishRun() {
+  const r = P.run; P.run = null; P.keyState.clear();
+  if (r.mode === 'listen') { updatePUI(); return; }
+  const res = evaluate(r); const prog = applyProgress(res); showResult(res, prog);
+  updatePUI(); dirty();
+  if (PR.loop && !prog.advanced) { const tok = ++P.loopToken; setTimeout(() => { if (P && !P.run && P.loopToken === tok && !$('#prac').hidden) startRun(false); }, 2200); }
+}
+function showResult(res, prog) {
+  const box = $('#pResult'); box.innerHTML = ''; const pct = (x) => Math.round(x * 100) + '%';
+  const head = document.createElement('div'); head.className = 'rc-head';
+  head.innerHTML = '<span class="badge ' + (res.pass ? 'pass' : 'fail') + '">' + (res.pass ? 'Passed' : 'Not yet') + '</span><strong>' + pct(res.acc) + '</strong><span class="loading">' + (res.mode === 'wait' ? 'clean notes' : 'notes hit') + '</span>';
+  const dl = document.createElement('dl'); dl.className = 'stats';
+  const stat = (k, v) => { const d = document.createElement('div'); d.innerHTML = '<dt></dt><dd></dd>'; d.firstChild.textContent = k; d.lastChild.textContent = v; dl.appendChild(d); };
+  stat('Wrong keys', res.wrong);
+  if (res.mode === 'wait') stat('Time waiting', res.waitTotal.toFixed(1) + ' s');
+  else { stat('Missed', res.missed); stat('Timing', (res.mean >= 0 ? '+' : '−') + Math.abs(Math.round(res.mean)) + ' ms'); stat('Steadiness', '±' + Math.round(res.sd) + ' ms'); }
+  const ul = document.createElement('ul'); ul.className = 'tips';
+  for (const tip of coachTips(res)) { const li = document.createElement('li'); li.textContent = tip; ul.appendChild(li); }
+  box.append(head, dl, ul);
+  if (prog.msg) { const p = document.createElement('p'); p.className = 'prog'; p.textContent = prog.msg; box.appendChild(p); }
+  const acts = document.createElement('div'); acts.className = 'acts';
+  const btn = (label, fn, cls) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.onclick = fn; acts.appendChild(b); };
+  const s = P.drill == null && !P.link ? secState(P.item, P.sec) : null;
+  if (prog.advanced && s && !learned(s)) btn('Go to next step', () => selectSection(P.sec), 'primary');
+  else if (prog.advanced && s && learned(s)) { const p = planFor(P.item, P.bars); if (p.due.length || p.next != null) btn('Next in today’s plan', () => selectSection(p.due[0] ?? p.next), 'primary'); }
+  btn('Again', () => startRun(false), prog.advanced ? '' : 'primary');
+  if (res.weakBar != null && P.drill == null) btn('Drill bar ' + (res.weakBar + 1), () => drillBar(res.weakBar));
+  btn('Close', () => { box.hidden = true; });
+  box.appendChild(acts); box.hidden = false;
+}
+
+/* falling notes */
+const fc = $('#fall'); const fg = fc.getContext('2d'); let FW = 0, FH = 0;
+function sizeFall() {
+  const r = $('#fallWrap').getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+  FW = Math.max(1, r.width); FH = Math.max(1, r.height); fc.width = Math.round(FW * dpr); fc.height = Math.round(FH * dpr); fg.setTransform(dpr, 0, 0, dpr, 0, 0); readColors(); dirty();
+}
+new ResizeObserver(() => { if (P) sizeFall(); }).observe($('#fallWrap'));
+function drawFall() {
+  const it = P.item; const r = P.run; const sp = PR.speed; const font = getComputedStyle(document.body).fontFamily;
+  let lo = 127, hi = 0; for (const n of it.notes) { lo = Math.min(lo, n.p); hi = Math.max(hi, n.p); }
+  if (lo > hi) { lo = 48; hi = 84; }
+  lo = Math.max(21, lo - 2); hi = Math.min(108, hi + 2); while (hi - lo < 24) { lo = Math.max(21, lo - 1); hi = Math.min(108, hi + 1); if (lo === 21 && hi === 108) break; }
+  while (isBlack(lo)) lo--; while (isBlack(hi)) hi++;
+  const whites = []; for (let p = lo; p <= hi; p++) if (!isBlack(p)) whites.push(p);
+  const ww = FW / whites.length; const bw = ww * 0.62; const wi = new Map(whites.map((p, i) => [p, i]));
+  const keyX = (p) => isBlack(p) ? (wi.get(p - 1) + 1) * ww - bw / 2 : wi.get(p) * ww;
+  const keyW = (p) => isBlack(p) ? bw : ww;
+  const kbH = clamp(FH * 0.2, 64, 120); const hitY = FH - kbH;
+  const songT = r ? r.songT : P.range[0] - 0.3 * sp;
+  const pxPerSong = hitY / 2.6 / sp;   // about 2.6 seconds of music visible, whatever the speed
+  const y = (t) => hitY - (t - songT) * pxPerSong;
+  fg.fillStyle = colors.panel; fg.fillRect(0, 0, FW, FH);
+  // key lanes and bar lines
+  for (const p of whites) if (p % 12 === 0) { fg.fillStyle = colors.line; fg.fillRect(Math.round(keyX(p)), 0, 1, hitY); }
+  fg.font = '11px ' + font; fg.textBaseline = 'bottom';
+  for (let k = barAt(P.bars, P.range[0]); k < P.bars.length && P.bars[k] <= P.range[1] + 1e-6; k++) {
+    const yy = Math.round(y(P.bars[k])); if (yy < 0 || yy > hitY) continue;
+    fg.fillStyle = colors.line; fg.fillRect(0, yy, FW, 1); fg.fillStyle = colors.muted; fg.fillText('Bar ' + (k + 1), 6, yy - 2);
+  }
+  const endY = y(P.range[1]); if (endY > 0) { fg.fillStyle = colors.bg; fg.globalAlpha = 0.7; fg.fillRect(0, 0, FW, Math.min(hitY, endY)); fg.globalAlpha = 1; }
+  // notes
+  const list = r ? r.notes : it.notes.filter((n) => n.t >= P.range[0] - 1e-6 && n.t < P.range[1] - 1e-6).map((n) => ({ ...n, hand: handOf(it, n) }));
+  const mineHand = (n) => PR.hands === 'B' || n.hand === PR.hands;
+  fg.textBaseline = 'bottom'; fg.textAlign = 'center';
+  for (const n of list) {
+    const y0 = y(n.t), y1 = y(n.t + n.d); if (y1 > hitY + 40 || y0 < -10) continue;
+    const x = keyX(n.p) + 1, w = keyW(n.p) - 2, top = y1, h = Math.max(4, y0 - y1);
+    let col = n.hand === 'R' ? colors.accent : colors.lh, a = mineHand(n) ? 1 : 0.28;
+    if (n.hit) col = n.ok === false ? colors.warn : colors.ok; else if (n.miss) { col = colors.rec; a = 0.55; }
+    fg.globalAlpha = a; fg.fillStyle = col;
+    fg.beginPath(); fg.roundRect ? fg.roundRect(x, top, w, h, Math.min(5, w / 2)) : fg.rect(x, top, w, h); fg.fill();
+    if (PR.names && w >= 12 && h >= 16 && mineHand(n)) { fg.globalAlpha = 1; fg.fillStyle = colors.panel; fg.font = '600 ' + Math.min(13, Math.floor(w * 0.6)) + 'px ' + font; fg.fillText(NOTE_NAMES[n.p % 12], x + w / 2, y0 - 3); }
+  }
+  fg.globalAlpha = 1; fg.textAlign = 'left';
+  // keyboard
+  const want = r && r.mode === 'wait' && r.steps[r.si] ? r.steps[r.si].ps : null;
+  // keys the iPad is sounding (other hand, or Listen) light up in their hand's colour
+  const sounding = new Map();
+  if (r) for (const n of r.auto) if (n.t <= songT && songT < n.t + n.d) sounding.set(n.p, n.hand === 'R' ? colors.accent : colors.lh);
+  const keyFill = (p, base) => { const ks = P.keyState.get(p); if (live.has(p)) return ks === 'bad' ? colors.rec : ks === 'ok' ? colors.ok : colors.accent; return sounding.get(p) || base; };
+  fg.fillStyle = '#9aa1ad'; fg.fillRect(0, hitY, FW, kbH);
+  fg.fillStyle = colors.line; fg.fillRect(0, hitY - 2, FW, 2);
+  for (const p of whites) {
+    const x = keyX(p); fg.fillStyle = keyFill(p, '#fbfbfa'); fg.fillRect(x + 0.5, hitY, ww - 1, kbH);
+    if (want && want.has(p) && !live.has(p)) { fg.fillStyle = colors.accent; fg.globalAlpha = 0.35; fg.fillRect(x + 0.5, hitY, ww - 1, kbH); fg.globalAlpha = 1; }
+    if (p % 12 === 0 && ww > 14) { fg.fillStyle = '#6b7280'; fg.font = '10px ' + font; fg.textAlign = 'center'; fg.fillText('C' + (p / 12 - 1), x + ww / 2, FH - 4); fg.textAlign = 'left'; }
+  }
+  for (let p = lo; p <= hi; p++) if (isBlack(p)) {
+    const x = keyX(p); fg.fillStyle = keyFill(p, '#1d2027'); fg.fillRect(x, hitY, bw, kbH * 0.62);
+    if (want && want.has(p) && !live.has(p)) { fg.fillStyle = colors.accent; fg.globalAlpha = 0.6; fg.fillRect(x, hitY, bw, kbH * 0.62); fg.globalAlpha = 1; }
+  }
+  if (!r && list.length && $('#pResult').hidden) {
+    fg.fillStyle = colors.muted; fg.font = '15px ' + font; fg.textAlign = 'center'; fg.textBaseline = 'middle';
+    fg.fillText('Press Start, or Listen to hear these bars first.', FW / 2, hitY * 0.35); fg.textAlign = 'left';
+  }
+}
+
 /* ---------------- wiring ---------------- */
 $('#newTake').onclick = async () => {
   const df = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -1168,7 +1638,7 @@ $('#importMidi').onchange = async (e) => {
     const parsed = parseMidi(await f.arrayBuffer()); if (!parsed.notes.length) throw new Error('This MIDI file has no notes.');
     const it = newItem('piece', f.name.replace(/\.(mid|midi|kar)$/i, ''));
     Object.assign(it, parsed); it.length = Math.max(...parsed.notes.map(noteEnd)) + 0.5;
-    await DB.put(it); items.unshift(it); openItem(it); toast('Opened ' + it.name);
+    await DB.put(it); items.unshift(it); openPractice(it); toast('Opened ' + it.name);
   } catch (err) { toast(err.message || 'Could not read that file.', 4000); }
 };
 $('#backupBtn').onclick = async () => {
@@ -1183,6 +1653,19 @@ $('#restoreFile').onchange = async (e) => {
     toast('Restored ' + data.items.length + ' recordings'); loadLibrary();
   } catch (err) { toast('That file is not a Piano Takes backup.', 4000); }
 };
+
+function closePracticeQuiet() { stopRun(); DB.put(P.item).catch(() => {}); P = null; }
+$('#practiceBtn').onclick = async () => { const it = cur.item; if (!it.notes.length) { toast('Record or open something first.'); return; } if (rec) pauseRecording(true); stopPlayback(); clearTimeout(saveTimer); await DB.put(it).catch(() => {}); cur = null; openPractice(it); };
+$('#pBack').onclick = closePractice;
+$('#pEdit').onclick = () => { const it = P.item; closePracticeQuiet(); openItem(it); };
+$$('#pHands button').forEach((b) => (b.onclick = () => { PR.hands = b.dataset.h; saveSettings(); updatePUI(); dirty(); }));
+$$('#pMode button').forEach((b) => (b.onclick = () => { PR.mode = b.dataset.m; saveSettings(); updatePUI(); }));
+holdRepeat($('#pSlow'), () => { if (P.run) return; PR.speed = Math.max(0.3, Math.round(PR.speed * 10 - 1) / 10); saveSettings(); updatePUI(); dirty(); });
+holdRepeat($('#pFast'), () => { if (P.run) return; PR.speed = Math.min(1.5, Math.round(PR.speed * 10 + 1) / 10); saveSettings(); updatePUI(); dirty(); });
+for (const [id, key] of [['#pLoop', 'loop'], ['#pNames', 'names'], ['#pClick', 'click'], ['#pOther', 'other']]) $(id).onclick = () => { PR[key] = !PR[key]; if (key === 'loop' && !PR.loop) P.loopToken++; saveSettings(); updatePUI(); dirty(); };
+$('#pSheet').onclick = () => { PR.sheet = !PR.sheet; saveSettings(); updatePUI(); requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); };
+$('#pStart').onclick = () => { if (P.run) { stopRun(); } else startRun(false); };
+$('#pListen').onclick = () => { if (P.run) stopRun(); else startRun(true); };
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
 $('#title').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
@@ -1252,7 +1735,7 @@ $$('#exportMenu [data-x]').forEach((b) => (b.onclick = async () => {
       await DB.put(copy); items.unshift(copy); openItem(copy); toast('Duplicated');
     }
     if (b.dataset.x === 'del') {
-      if (await ask('Delete “' + it.name + '”? This can’t be undone.', 'Delete')) { if (rec) pauseRecording(true); stopPlayback(); await DB.del(it.id); cur = null; $('#ses').hidden = true; $('#lib').hidden = false; loadLibrary(); toast('Deleted'); }
+      if (await ask('Delete “' + it.name + '”? This can’t be undone.', 'Delete')) { if (rec) pauseRecording(true); stopPlayback(); await DB.del(it.id); cur = null; showScreen('lib'); loadLibrary(); toast('Deleted'); }
     }
   } catch (err) { console.error(err); toast('Export failed: ' + (err.message || err), 4000); }
 }));
