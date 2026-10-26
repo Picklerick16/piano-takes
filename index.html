@@ -204,7 +204,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <div id="midiHelp" class="notice" hidden></div>
         <div class="lib-actions">
           <button id="newTake" class="primary">● New recording</button>
-          <label class="btn" for="importMidi">Open a MIDI file</label>
+          <label class="btn" for="importMidi">Open a MIDI or MusicXML file</label>
           <input type="file" id="importMidi" hidden>
         </div>
         <h2>Your recordings and pieces</h2>
@@ -257,10 +257,11 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
           <p class="note">With the click on, bar lines show in the editor and sheet music lines up exactly with what you played.</p>
         </div>
       </div>
+      <button id="noteEditBtn" class="toggle" aria-pressed="false" title="When on, tap a note to select it, then change its length or delete it">✎ Edit notes</button>
       <button id="monitorBtn" class="toggle" aria-pressed="false" title="Also play the iPad piano sound while you play">iPad sound</button>
       <span class="grow"></span>
-      <button id="undoBtn">↶ Undo</button>
-      <button id="redoBtn">↷ Redo</button>
+      <button id="undoBtn" class="sq" aria-label="Undo" title="Undo">↶</button>
+      <button id="redoBtn" class="sq" aria-label="Redo" title="Redo">↷</button>
       <button id="zoomOut" class="sq" aria-label="Zoom out">−</button>
       <button id="zoomFit">Fit</button>
       <button id="zoomIn" class="sq" aria-label="Zoom in">+</button>
@@ -292,6 +293,15 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <button id="cutSel" class="need-sel danger">✂ Cut out</button>
       <button id="keepSel" class="need-sel">Keep only this</button>
       <button id="clearSel" class="need-sel sq" aria-label="Clear selection">✕</button>
+    </div>
+    <div class="selbar" id="notebar" hidden>
+      <span class="lab">Note</span><output id="nName">–</output>
+      <div class="edge need-note"><span class="lab">Starts</span><output id="nStart">–</output></div>
+      <div class="edge need-note"><span class="lab">Length</span><button class="sq" data-nl="-1" aria-label="Shorter">−</button><output id="nLen">–</output><button class="sq" data-nl="1" aria-label="Longer">+</button></div>
+      <span class="sel-hint" id="nHint">Tap a note to select it. Drag its right end to change the length.</span>
+      <span class="grow"></span>
+      <button id="nDel" class="danger need-note">Delete note</button>
+      <button id="nDone" class="primary">Done editing</button>
     </div>
     <p class="hint" id="hint">Drag in the time strip at the top to select · drag the edges to adjust · tap to move the playhead · drag the notes to scroll · pinch to zoom</p>
   </section>
@@ -613,6 +623,108 @@ function parseMidi(buf) {
   }
   return { notes, pedal: ped, bars, tempo: { bpm: Math.round(60e6 / tempos[0].us), beats, offset: 0, metro: false } };
 }
+/* ---------------- MusicXML files ---------------- */
+// .mxl is a zip; read its central directory and inflate the score with the browser's own decompressor
+async function unzipMxl(buf) {
+  const d = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
+  let e = -1; for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (d.getUint32(i, true) === 0x06054b50) { e = i; break; }
+  if (e < 0) throw new Error('This .mxl file is damaged.');
+  const files = {}; let p = d.getUint32(e + 16, true);
+  for (let k = d.getUint16(e + 10, true); k > 0; k--) {
+    const nlen = d.getUint16(p + 28, true);
+    files[dec.decode(u8.subarray(p + 46, p + 46 + nlen))] = { method: d.getUint16(p + 10, true), size: d.getUint32(p + 20, true), off: d.getUint32(p + 42, true) };
+    p += 46 + nlen + d.getUint16(p + 30, true) + d.getUint16(p + 32, true);
+  }
+  const read = async (f) => {
+    const start = f.off + 30 + d.getUint16(f.off + 26, true) + d.getUint16(f.off + 28, true); const data = u8.subarray(start, start + f.size);
+    if (f.method === 0) return dec.decode(data);
+    if (f.method !== 8 || typeof DecompressionStream === 'undefined') throw new Error('This .mxl file can’t be unpacked here. Export it as uncompressed MusicXML (.musicxml) instead.');
+    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  };
+  let root = null;
+  if (files['META-INF/container.xml']) { const m = (await read(files['META-INF/container.xml'])).match(/full-path="([^"]+)"/); if (m) root = m[1]; }
+  if (!root || !files[root]) root = Object.keys(files).find((n) => !n.startsWith('META-INF') && /\.(xml|musicxml)$/i.test(n));
+  if (!root) throw new Error('No score found inside this .mxl file.');
+  return read(files[root]);
+}
+// Plays the score once from start to end: repeats and jumps (D.C., coda) are not followed.
+function parseMusicXML(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('This MusicXML file could not be read.');
+  const score = doc.querySelector('score-partwise');
+  if (!score) throw new Error(doc.querySelector('score-timewise') ? 'This kind of MusicXML (timewise) is not supported. Export it from MuseScore again.' : 'This is not a MusicXML score.');
+  const kid = (el, name) => { for (const c of el.children) if (c.tagName === name) return c; return null; };
+  const kids = (el, name) => [...el.children].filter((c) => c.tagName === name);
+  const num = (el, name, def) => { const c = el && kid(el, name); const v = c ? parseFloat(c.textContent) : NaN; return isNaN(v) ? def : v; };
+  const STEP = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const DYN = { pppp: 25, ppp: 32, pp: 42, p: 55, mp: 68, mf: 82, f: 96, ff: 108, fff: 118, ffff: 124, sf: 105, sfz: 108, fz: 105 };
+  const velOf = (x) => clamp(Math.round(+x * 0.9), 1, 127);   // MusicXML dynamics: 100 = forte = velocity 90
+  const tempos = [], raw = [], pedalQ = [], tsl = []; let barQ = [];
+  kids(score, 'part').forEach((part, pi) => {
+    let div = 1, q = 0, vel = 80; const open = new Map(), bars = [];
+    for (const m of kids(part, 'measure')) {
+      bars.push(q); let pos = q, maxPos = q, lastStart = q;
+      for (const el of m.children) {
+        const tag = el.tagName;
+        if (tag === 'attributes') {
+          div = num(el, 'divisions', div); const t = kid(el, 'time');
+          if (t && pi === 0) tsl.push({ q: pos, num: num(t, 'beats', 4), den: num(t, 'beat-type', 4) });
+        } else if (tag === 'sound') {
+          if (el.getAttribute('tempo') && pi === 0) tempos.push({ q: pos, bpm: +el.getAttribute('tempo') });
+        } else if (tag === 'direction') {
+          const snd = kid(el, 'sound');
+          if (snd && snd.getAttribute('tempo') && pi === 0) tempos.push({ q: pos, bpm: +snd.getAttribute('tempo') });
+          if (snd && snd.getAttribute('dynamics')) vel = velOf(snd.getAttribute('dynamics'));
+          const dy = el.querySelector('dynamics'); if (dy && dy.firstElementChild && DYN[dy.firstElementChild.tagName]) vel = DYN[dy.firstElementChild.tagName];
+          const ped = el.querySelector('pedal');
+          if (ped) {
+            const ty = ped.getAttribute('type');
+            if (ty === 'start') pedalQ.push({ q: pos, on: true }); else if (ty === 'stop') pedalQ.push({ q: pos, on: false });
+            else if (ty === 'change') pedalQ.push({ q: pos, on: false }, { q: pos + 0.05, on: true });
+          }
+        } else if (tag === 'backup') pos -= num(el, 'duration', 0) / div;
+        else if (tag === 'forward') { pos += num(el, 'duration', 0) / div; maxPos = Math.max(maxPos, pos); }
+        else if (tag === 'note') {
+          if (kid(el, 'grace') || kid(el, 'cue')) continue;
+          const dq = num(el, 'duration', 0) / div; const chord = !!kid(el, 'chord');
+          const start = chord ? lastStart : pos;
+          if (!chord) { lastStart = pos; pos += dq; }
+          maxPos = Math.max(maxPos, pos);
+          const pitch = kid(el, 'pitch'); if (!pitch || kid(el, 'rest')) continue;
+          const step = STEP[(kid(pitch, 'step') || {}).textContent?.trim()]; if (step == null) continue;
+          const p = (num(pitch, 'octave', 4) + 1) * 12 + step + Math.round(num(pitch, 'alter', 0));
+          const staff = num(el, 'staff', 1); const ties = kids(el, 'tie').map((t) => t.getAttribute('type'));
+          const key = pi + ':' + staff + ':' + p;
+          if (ties.includes('stop') && open.has(key)) { const o = open.get(key); o.dq = start + dq - o.q; if (!ties.includes('start')) open.delete(key); continue; }
+          const n = { p, v: el.getAttribute('dynamics') ? velOf(el.getAttribute('dynamics')) : vel, q: start, dq, part: pi, staff };
+          raw.push(n); if (ties.includes('start')) open.set(key, n);
+        }
+      }
+      q = maxPos;
+    }
+    if (pi === 0) barQ = bars;
+  });
+  if (!raw.length) throw new Error('This score has no notes.');
+  // hands: a two-staff part is split by staff, separate parts by how high they sound
+  const twoStaff = new Set(raw.filter((n) => n.staff === 2).map((n) => n.part));
+  const mean = new Map(); for (const n of raw) { const m = mean.get(n.part) || [0, 0]; m[0] += n.p; m[1]++; mean.set(n.part, m); }
+  const parts = [...mean.entries()].map(([k, [s, c]]) => [k, s / c]).sort((a, b) => b[1] - a[1]);
+  for (const n of raw) {
+    if (twoStaff.has(n.part)) n.h = n.staff === 1 ? 'R' : 'L';
+    else if (parts.length === 2) n.h = n.part === parts[0][0] ? 'R' : 'L';
+    else if (parts.length > 2) n.h = mean.get(n.part)[0] / mean.get(n.part)[1] >= 60 ? 'R' : 'L';
+  }
+  tempos.sort((a, b) => a.q - b.q);
+  if (!tempos.length) tempos.push({ q: 0, bpm: 100 });
+  if (tempos[0].q > 0) tempos.unshift({ q: 0, bpm: tempos[0].bpm });
+  const segs = []; let sec = 0;
+  tempos.forEach((tp, i) => { if (i) sec += (tp.q - tempos[i - 1].q) * 60 / tempos[i - 1].bpm; segs.push({ q: tp.q, sec, bpm: tp.bpm }); });
+  const toSec = (x) => { let s = segs[0]; for (const g of segs) { if (g.q <= x + 1e-9) s = g; else break; } return s.sec + (x - s.q) * 60 / s.bpm; };
+  const notes = raw.map((n) => { const t = toSec(n.q); return { p: n.p, v: n.v, t, d: Math.max(0.01, toSec(n.q + n.dq) - t), ...(n.h ? { h: n.h } : {}) }; }).sort((a, b) => a.t - b.t);
+  const ped = []; for (const e of pedalQ.sort((a, b) => a.q - b.q)) if (!ped.length || ped[ped.length - 1].on !== e.on) ped.push({ t: toSec(e.q), on: e.on });
+  const ts = tsl[0]; const beats = ts && ts.den === 4 && [2, 3, 4].includes(ts.num) ? ts.num : 4;
+  return { notes, pedal: ped, bars: barQ.map(toSec), tempo: { bpm: Math.round(tempos[0].bpm), beats, offset: 0, metro: false } };
+}
 function writeMidi(it) {
   const ppq = 480; const tp = it.tempo || { bpm: 120, beats: 4, offset: 0 };
   const spt = 60 / tp.bpm / ppq; let shift = 0;
@@ -909,7 +1021,7 @@ function stopPlayback(natural) {
 const snap = (it) => JSON.stringify({ notes: it.notes, pedal: it.pedal, length: it.length, tempo: it.tempo, split: it.split, bars: it.bars || null });
 const undoTop = () => cur.undo[cur.undo.length - 1];
 function pushUndo() { cur.undo.push(snap(cur.item)); if (cur.undo.length > 60) cur.undo.shift(); cur.redo = []; }
-function restore(s) { Object.assign(cur.item, JSON.parse(s)); }
+function restore(s) { Object.assign(cur.item, JSON.parse(s)); cur.selNote = null; }
 function undo() { if (!cur.undo.length || rec && rec.state !== 'paused') return; stopPlayback(); cur.redo.push(snap(cur.item)); restore(cur.undo.pop()); afterEdit('Undone'); }
 function redo() { if (!cur.redo.length || rec && rec.state !== 'paused') return; stopPlayback(); cur.undo.push(snap(cur.item)); restore(cur.redo.pop()); afterEdit('Redone'); }
 function afterEdit(msg) {
@@ -933,7 +1045,7 @@ function renderList() {
   try { navigator.storage.estimate().then((e) => { $('#storeUse').textContent = ', using ' + (e.usage < 1e6 ? Math.max(1, Math.round(e.usage / 1e3)) + ' KB' : (e.usage / 1e6).toFixed(1) + ' MB'); }).catch(() => {}); } catch (e) {}
   if (!items.length) {
     const li = document.createElement('li'); li.className = 'empty';
-    li.textContent = 'Nothing here yet. Tap “New recording”, then Record, and play. Or open a MIDI file of a piece you’re learning.';
+    li.textContent = 'Nothing here yet. Tap “New recording”, then Record, and play. Or open a MIDI or MusicXML file of a piece you’re learning.';
     ul.appendChild(li); return;
   }
   const df = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1008,6 +1120,14 @@ function updateUI() {
   $('#selA').textContent = s ? fmt(s.a) : '–'; $('#selB').textContent = s ? fmt(s.b) : '–'; $('#selL').textContent = s ? (s.b - s.a).toFixed(3) + ' s' : '–';
   $$('#selbar button').forEach((b) => { if (b.closest('.need-sel') || b.classList.contains('need-sel')) b.disabled = !s || !!recording; });
   $('#clockLen').textContent = 'of ' + fmt(it.length);
+  if (recording) { cur.noteEdit = false; cur.selNote = null; }
+  $('#noteEditBtn').setAttribute('aria-pressed', String(!!cur.noteEdit)); $('#noteEditBtn').disabled = !!recording;
+  $('#selbar').hidden = !!cur.noteEdit; $('#notebar').hidden = !cur.noteEdit;
+  const sn = cur.noteEdit && cur.selNote;
+  $('#nName').textContent = sn ? noteName(sn.p) : '–'; $('#nStart').textContent = sn ? fmt(sn.t) : '–'; $('#nLen').textContent = sn ? sn.d.toFixed(3) + ' s' : '–';
+  $('#nHint').hidden = !!sn; $$('#notebar .need-note').forEach((el) => { el.style.opacity = sn ? '' : '.35'; el.style.pointerEvents = sn ? '' : 'none'; });
+  $('#hint').textContent = cur.noteEdit ? 'Editing notes: tap a note to select it · drag its right end to change the length · drag empty space to scroll · pinch to zoom'
+    : 'Drag in the time strip at the top to select · drag the edges to adjust · tap to move the playhead · drag the notes to scroll · pinch to zoom';
   $$('[data-x]').forEach((b) => { if (['midi', 'wav', 'png'].includes(b.dataset.x)) b.disabled = !it.notes.length; });
   $('[data-x="png"]').hidden = !it.sheet;
 }
@@ -1058,7 +1178,7 @@ function draw() {
     const span = visLen();
     if (now > cur.view.x0 + span * 0.88 || now < cur.view.x0) cur.view.x0 = Math.max(0, now - span * (rec ? 0.75 : 0.1));
   }
-  const [lo, hi] = pitchRange(); const rows = hi - lo + 1; const rh = (H - RH) / rows;
+  const [lo, hi] = pitchRange(); const rows = hi - lo + 1; const rh = (H - RH) / rows; cur.layout = { lo, hi, rh };
   const py = (p) => RH + (hi - p) * rh;
   g.clearRect(0, 0, W, H);
   g.fillStyle = colors.panel; g.fillRect(0, 0, W, H);
@@ -1095,6 +1215,12 @@ function draw() {
     g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.fill();
   };
   for (const n of it.notes) { if (n.t > t1) continue; if (n.t + n.d < t0) continue; drawNote(n.p, n.t, n.d, n.v, colors.note); }
+  const sn = cur.noteEdit && cur.selNote;
+  if (sn) {  // selected note: outline plus a grip on its right end for changing the length
+    g.globalAlpha = 1; const x = tx(sn.t), w = Math.max(2, sn.d * cur.view.pps), y = py(sn.p);
+    g.strokeStyle = colors['sel-strong']; g.lineWidth = 2; g.strokeRect(x - 1, y, w + 2, rh);
+    g.fillStyle = colors['sel-strong']; g.fillRect(x + w - 3, y - 6, 8, rh + 12);
+  }
   if (rec && rec.state === 'rec') for (const h of rec.held.values()) drawNote(h.p, h.t, Math.max(0.01, now - h.t), h.v, colors.rec);
   g.globalAlpha = 1;
   // pedal strip
@@ -1185,6 +1311,13 @@ cv.addEventListener('pointerdown', (e) => {
   if (ptrs.size > 2) return;
   const x = e.offsetX, y = e.offsetY; const s = cur.sel;
   const recording = rec && rec.state !== 'paused';
+  if (cur.noteEdit && !recording && y >= RH) {
+    const sn = cur.selNote; const L = cur.layout;
+    if (sn && L && Math.abs(x - tx(sn.t + sn.d)) < 18 && Math.abs(y - (RH + (L.hi - sn.p + 0.5) * L.rh)) < L.rh / 2 + 22) { cur.drag = { mode: 'noteLen', note: sn }; return; }
+    const n = noteAt(x, y);
+    cur.drag = { mode: n ? 'notePending' : 'panPending', note: n, x0: x, y0: y, vx0: cur.view.x0 };
+    return;
+  }
   if (s && !recording) {
     const da = Math.abs(x - tx(s.a)), db = Math.abs(x - tx(s.b));
     const nearA = da < 26 && (x <= tx(s.a) + 8 || da <= db), nearB = db < 26;
@@ -1200,6 +1333,12 @@ cv.addEventListener('pointermove', (e) => {
     const [p1, p2] = [...ptrs.values()]; const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1; const cx = (p1.x + p2.x) / 2;
     cur.view.pps = clamp(d.pps0 * dist / d.d0, 4, 6000); cur.view.x0 = d.tc - (cx - KW) / cur.view.pps; clampView(); dirty(); return;
   }
+  if (d.mode === 'noteLen') {
+    if (!d.pushed) { pushUndo(); d.pushed = true; }
+    const n = d.note; n.d = Math.max(0.01, snapTime(xt(x), x) - n.t); cur.item.length = Math.max(cur.item.length, n.t + n.d);
+    edgeScroll(x); updateUI(); dirty(); return;
+  }
+  if (d.mode === 'notePending' && Math.abs(x - d.x0) > 6) d.mode = 'pan';
   if (d.mode === 'handle') {
     const t = limitT(snapTime(xt(x), x)); const s = cur.sel;
     if (d.which === 'a') { s.a = t; if (s.a > s.b) { [s.a, s.b] = [s.b, s.a]; d.which = 'b'; } }
@@ -1219,6 +1358,9 @@ function endPointer(e) {
   if (!cur) return; ptrs.delete(e.pointerId);
   const d = cur.drag; if (!d) return;
   if (d.mode === 'pinch') { if (ptrs.size === 0) cur.drag = null; return; }
+  if (d.mode === 'notePending') { cur.selNote = d.note; cur.drag = null; updateUI(); dirty(); return; }
+  if (d.mode === 'noteLen') { cur.drag = null; if (d.pushed) afterEdit(); return; }
+  if (cur.noteEdit && d.mode === 'panPending') cur.selNote = null;
   if ((d.mode === 'rulerPending' || d.mode === 'panPending') && !(rec && rec.state !== 'paused')) {
     const t = limitT(xt(d.x0)); if (play) startPlayback(t); else cur.playhead = t;
   }
@@ -1658,8 +1800,10 @@ $('#newTake').onclick = async () => {
 $('#importMidi').onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
-    const parsed = parseMidi(await f.arrayBuffer()); if (!parsed.notes.length) throw new Error('This MIDI file has no notes.');
-    const it = newItem('piece', f.name.replace(/\.(mid|midi|kar)$/i, ''));
+    const buf = await f.arrayBuffer(); const head = new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(4, buf.byteLength)));
+    const parsed = head === 'MThd' ? parseMidi(buf) : head.startsWith('PK') ? parseMusicXML(await unzipMxl(buf)) : parseMusicXML(new TextDecoder().decode(buf));
+    if (!parsed.notes.length) throw new Error('This file has no notes.');
+    const it = newItem('piece', f.name.replace(/\.(mid|midi|kar|mxl|musicxml|xml)$/i, ''));
     Object.assign(it, parsed); it.length = Math.max(...parsed.notes.map(noteEnd)) + 0.5;
     await DB.put(it); items.unshift(it); openPractice(it); toast('Opened ' + it.name);
   } catch (err) { toast(err.message || 'Could not read that file.', 4000); }
@@ -1689,6 +1833,26 @@ for (const [id, key] of [['#pLoop', 'loop'], ['#pNames', 'names'], ['#pClick', '
 $('#pSheet').onclick = () => { PR.sheet = !PR.sheet; saveSettings(); updatePUI(); requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); };
 $('#pStart').onclick = () => { if (P.run) { stopRun(); } else startRun(false); };
 $('#pListen').onclick = () => { if (P.run) stopRun(); else startRun(true); };
+
+function noteAt(x, y) {
+  const L = cur.layout; if (!L || y < RH || x < KW) return null;
+  const p = L.hi - Math.floor((y - RH) / L.rh); const t = xt(x); const tol = 6 / cur.view.pps; let best = null;
+  for (const n of cur.item.notes) if (n.p === p && t >= n.t - tol && t <= n.t + Math.max(n.d, 3 / cur.view.pps) + tol && (!best || n.t > best.t)) best = n;
+  return best;
+}
+$('#noteEditBtn').onclick = () => { cur.noteEdit = !cur.noteEdit; cur.selNote = null; if (cur.noteEdit) cur.sel = null; updateUI(); dirty(); };
+$('#nDone').onclick = () => { cur.noteEdit = false; cur.selNote = null; updateUI(); dirty(); };
+$('#nDel').onclick = () => {
+  const n = cur.selNote; const i = cur.item.notes.indexOf(n); if (i < 0) return;
+  stopPlayback(); pushUndo(); cur.item.notes.splice(i, 1); cur.selNote = null; afterEdit('Note deleted');
+};
+let lastNudge = 0;
+$$('#notebar [data-nl]').forEach((b) => holdRepeat(b, () => {
+  const n = cur.selNote; if (!n) return;
+  if (Date.now() - lastNudge > 1500) pushUndo(); lastNudge = Date.now();
+  n.d = Math.max(0.01, n.d + Math.sign(+b.dataset.nl) * settings.step); cur.item.length = Math.max(cur.item.length, n.t + n.d);
+  save(); updateUI(); dirty(); renderSheetSoon();
+}));
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
 $('#title').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
@@ -1766,7 +1930,8 @@ document.addEventListener('keydown', (e) => {
   if (!cur || $('#ses').hidden || e.target.tagName === 'INPUT') return;
   if (e.key === ' ') { e.preventDefault(); $('#playBtn').click(); }
   else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-  else if ((e.key === 'Backspace' || e.key === 'Delete') && cur.sel) { e.preventDefault(); $('#cutSel').click(); }
+  else if ((e.key === 'Backspace' || e.key === 'Delete') && cur.noteEdit && cur.selNote) { e.preventDefault(); $('#nDel').click(); }
+  else if ((e.key === 'Backspace' || e.key === 'Delete') && cur.sel && !cur.noteEdit) { e.preventDefault(); $('#cutSel').click(); }
   else if (e.key === 'r' && !rec) startRecording();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && cur) { if (rec && rec.state !== 'paused') pauseRecording(false); DB.put(cur.item).catch(() => {}); } });
