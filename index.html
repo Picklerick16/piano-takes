@@ -81,13 +81,16 @@ button.sq { width: 44px; padding: 0; font-size: 20px; }
 .notice { background: var(--panel); border: 1px solid var(--warn); border-radius: 12px; padding: 14px 16px; line-height: 1.5; max-width: 70ch; }
 .notice strong { color: var(--warn); }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
-#list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+#list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 #list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 14px 16px; border-top: 1px solid var(--line); cursor: pointer; }
 #list li:first-child { border-top: 0; }
 #list li:active { background: var(--bg); }
 #list .nm { font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #list .meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 #list .kind { font-size: 12px; color: var(--accent); border: 1px solid currentColor; border-radius: 6px; padding: 1px 6px; margin-left: 8px; font-weight: 500; }
+#list li { grid-template-columns: 1fr auto auto; align-items: center; }
+#list .meta:last-child { grid-column: 1 / -1; }
+.rowmore .menu { min-width: 160px; }
 #list .empty { cursor: default; color: var(--muted); display: block; line-height: 1.5; }
 .lib-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 14px; }
 .credit { font-size: 12px; color: var(--muted); margin: 0; width: 100%; }
@@ -207,7 +210,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <h2>Your recordings and pieces</h2>
         <ul id="list"></ul>
         <div class="lib-foot">
-          <span>Everything is saved on this device.</span>
+          <span>Everything is saved on this device<span id="storeUse"></span>.</span>
           <button id="backupBtn">Back up all</button>
           <label class="btn" for="restoreFile">Restore a backup</label>
           <input type="file" id="restoreFile" hidden>
@@ -770,10 +773,12 @@ async function initMidi() {
     const acc = await navigator.requestMIDIAccess({ sysex: false });
     const bind = () => {
       const names = [];
-      acc.inputs.forEach((inp) => { inp.onmidimessage = onMidi; names.push(inp.name || 'MIDI device'); });
+      // unplugged devices can stay listed as 'disconnected', so count only connected ones
+      acc.inputs.forEach((inp) => { if (inp.state && inp.state !== 'connected') return; inp.onmidimessage = onMidi; names.push(inp.name || 'MIDI device'); });
       setMidi(names.length ? 'ok' : 'nodev', names.join(', '));
     };
     bind(); acc.onstatechange = bind;
+    setInterval(bind, 3000);  // some iPad MIDI browsers never report unplugging
   } catch (e) { setMidi('denied'); }
 }
 function setMidi(state, names = '') {
@@ -925,6 +930,7 @@ async function loadLibrary() {
 }
 function renderList() {
   const ul = $('#list'); ul.innerHTML = '';
+  try { navigator.storage.estimate().then((e) => { $('#storeUse').textContent = ', using ' + (e.usage < 1e6 ? Math.max(1, Math.round(e.usage / 1e3)) + ' KB' : (e.usage / 1e6).toFixed(1) + ' MB'); }).catch(() => {}); } catch (e) {}
   if (!items.length) {
     const li = document.createElement('li'); li.className = 'empty';
     li.textContent = 'Nothing here yet. Tap “New recording”, then Record, and play. Or open a MIDI file of a piece you’re learning.';
@@ -938,7 +944,17 @@ function renderList() {
     const len = document.createElement('div'); len.className = 'meta'; len.textContent = fmt(it.length).replace(/\.\d+$/, '');
     const meta = document.createElement('div'); meta.className = 'meta'; const due = it.kind === 'piece' ? dueCount(it) : 0;
     meta.textContent = df.format(it.updated) + ' · ' + it.notes.length + ' notes' + (due ? ' · ' + due + ' to review today' : '');
-    li.append(nm, len, meta);
+    const more = document.createElement('div'); more.className = 'menu-wrap rowmore';
+    more.innerHTML = '<button class="sq ghost" aria-label="More for this recording">⋯</button><div class="menu" hidden><button class="danger">Delete…</button></div>';
+    const [mb, mm] = [more.querySelector('button'), more.querySelector('.menu')];
+    mb.onclick = (e) => { e.stopPropagation(); const open = mm.hidden; $$('.menu').forEach((m) => (m.hidden = true)); mm.hidden = !open; };
+    mm.onclick = (e) => e.stopPropagation();
+    mm.querySelector('button').onclick = async () => {
+      mm.hidden = true;
+      if (!(await ask('Delete “' + it.name + '”? This can’t be undone.', 'Delete'))) return;
+      await DB.del(it.id); items = items.filter((x) => x.id !== it.id); renderList(); toast('Deleted');
+    };
+    li.append(nm, len, more, meta);
     const open = () => (it.kind === 'piece' ? openPractice(it) : openItem(it));
     li.onclick = open;
     li.onkeydown = (e) => { if (e.key === 'Enter') open(); };
