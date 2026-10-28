@@ -206,7 +206,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <div id="midiHelp" class="notice" hidden></div>
         <div class="lib-actions">
           <button id="newTake" class="primary">● New recording</button>
-          <label class="btn" for="importMidi">Open a MIDI or MusicXML file</label>
+          <button id="importBtn">Open a MIDI or MusicXML file</button>
+          <button id="pasteBtn" title="Bring in a piece copied from this app in another browser">Paste a piece</button>
           <input type="file" id="importMidi" class="vh" tabindex="-1">
         </div>
         <h2>Your recordings and pieces</h2>
@@ -214,7 +215,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <div class="lib-foot">
           <span>Everything is saved on this device<span id="storeUse"></span>.</span>
           <button id="backupBtn">Back up all</button>
-          <label class="btn" for="restoreFile">Restore a backup</label>
+          <button id="restoreBtn">Restore a backup</button>
           <input type="file" id="restoreFile" class="vh" tabindex="-1">
           <p class="credit">Piano sound: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0.</p>
         </div>
@@ -340,6 +341,13 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
   </section>
 
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="pasteModal" class="modal" hidden>
+    <div class="box" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
+      <p id="pasteTitle"><b>Paste a piece</b><br>In the browser where the piece is (for example Safari), tap ⋯ next to it and choose “Copy for another browser”. Then come back here, tap the box below, hold your finger on it and choose Paste.</p>
+      <textarea id="pasteBox" rows="4" style="width:100%;font:inherit;font-size:14px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);-webkit-user-select:text;user-select:text" aria-label="Paste the copied piece here"></textarea>
+      <div class="acts"><button id="pasteNo">Cancel</button><button id="pasteYes" class="primary">Add piece</button></div>
+    </div>
+  </div>
   <div id="modal" class="modal" hidden>
     <div class="box" role="dialog" aria-modal="true">
       <p id="modalText"></p>
@@ -1059,11 +1067,17 @@ function renderList() {
     const meta = document.createElement('div'); meta.className = 'meta'; const due = it.kind === 'piece' ? dueCount(it) : 0;
     meta.textContent = df.format(it.updated) + ' · ' + it.notes.length + ' notes' + (due ? ' · ' + due + ' to review today' : '');
     const more = document.createElement('div'); more.className = 'menu-wrap rowmore';
-    more.innerHTML = '<button class="sq ghost" aria-label="More for this recording">⋯</button><div class="menu" hidden><button class="danger">Delete…</button></div>';
+    more.innerHTML = '<button class="sq ghost" aria-label="More for this recording">⋯</button><div class="menu" hidden><button data-copy>Copy for another browser</button><button class="danger" data-del>Delete…</button></div>';
     const [mb, mm] = [more.querySelector('button'), more.querySelector('.menu')];
     mb.onclick = (e) => { e.stopPropagation(); const open = mm.hidden; $$('.menu').forEach((m) => (m.hidden = true)); mm.hidden = !open; };
     mm.onclick = (e) => e.stopPropagation();
-    mm.querySelector('button').onclick = async () => {
+    mm.querySelector('[data-copy]').onclick = async () => {
+      mm.hidden = true;
+      const text = 'piano-takes:' + JSON.stringify({ app: 'piano-takes', item: it });
+      try { await navigator.clipboard.writeText(text); toast('Copied. Open the app in the other browser and tap “Paste a piece”.', 4000); }
+      catch (e) { toast('Copying was blocked by this browser.', 4000); }
+    };
+    mm.querySelector('[data-del]').onclick = async () => {
       mm.hidden = true;
       if (!(await ask('Delete “' + it.name + '”? This can’t be undone.', 'Delete'))) return;
       await DB.del(it.id); items = items.filter((x) => x.id !== it.id); renderList(); toast('Deleted');
@@ -1855,6 +1869,21 @@ $$('#notebar [data-nl]').forEach((b) => holdRepeat(b, () => {
   n.d = Math.max(0.01, n.d + Math.sign(+b.dataset.nl) * settings.step); cur.item.length = Math.max(cur.item.length, n.t + n.d);
   save(); updateUI(); dirty(); renderSheetSoon();
 }));
+
+// buttons open the pickers in script: some iPad web views ignore a label tied to a file input
+$('#importBtn').onclick = () => $('#importMidi').click();
+$('#restoreBtn').onclick = () => $('#restoreFile').click();
+$('#pasteBtn').onclick = () => { $('#pasteBox').value = ''; $('#pasteModal').hidden = false; $('#pasteBox').focus(); };
+$('#pasteNo').onclick = () => { $('#pasteModal').hidden = true; };
+$('#pasteYes').onclick = async () => {
+  const raw = $('#pasteBox').value.trim().replace(/^piano-takes:/, '');
+  try {
+    const data = JSON.parse(raw); const it = data && data.app === 'piano-takes' && data.item;
+    if (!it || !Array.isArray(it.notes)) throw new Error();
+    Object.assign(it, { id: uid(), updated: Date.now() });
+    await DB.put(it); $('#pasteModal').hidden = true; await loadLibrary(); toast('Added ' + it.name);
+  } catch (e) { toast('That isn’t a copied piece. Copy it again with ⋯ → Copy for another browser.', 4500); }
+};
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
 $('#title').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
