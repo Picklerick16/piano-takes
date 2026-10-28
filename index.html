@@ -177,6 +177,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .pwork { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .psheet { flex: 0 0 auto; height: 40%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); padding: 4px 16px; position: relative; }
 /* drag handle between the sheet music and the falling notes */
+#pSheetOut .lit, #pSheetOut .lit * { fill: #d0342c !important; }
 .psplit { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; background: var(--panel); border-block: 1px solid var(--line); cursor: row-resize; touch-action: none; }
 .psplit::before { content: ""; width: 56px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .6; }
 .psplit.drag::before { background: var(--accent); opacity: 1; }
@@ -904,27 +905,37 @@ function buildAbc(it) {
         s += take; rem -= take;
       }
     }
-    return bars.map((tokens) => {
-      if (tokens.every((t) => !t.ps)) return 'z' + bar;
-      const st = {};
-      return tokens.map((t) => {
-        const sp = t.pos % 4 === 0 ? ' ' : '';
+    // each bar's text, plus where every note starts in it (for lighting notes up during playback)
+    return bars.map((tokens, bi) => {
+      if (tokens.every((t) => !t.ps)) return { txt: 'z' + bar, marks: [] };
+      const st = {}; const marks = []; let txt = '';
+      for (const t of tokens) {
+        if (txt && t.pos % 4 === 0) txt += ' ';
         const ln = t.len === 1 ? '' : String(t.len);
-        if (!t.ps) return sp + 'z' + ln;
+        if (!t.ps) { txt += 'z' + ln; continue; }
         const ns = t.ps.map((p) => abcNote(p, key, st));
-        return sp + (ns.length > 1 ? '[' + ns.join('') + ']' : ns[0]) + ln + (t.tie ? '-' : '');
-      }).join('').trim();
+        marks.push({ at: txt.length, s16: bi * bar + t.pos, len: t.len });
+        txt += (ns.length > 1 ? '[' + ns.join('') + ']' : ns[0]) + ln + (t.tie ? '-' : '');
+      }
+      return { txt, marks };
     });
   };
   const R = staff('R'), Lh = staff('L');
   const title = (it.name || '').replace(/[\r\n%]/g, ' ');
   let abc = `X:1\nT:${title}\nM:${tp.beats}/4\nL:1/16\nQ:1/4=${Math.round(tp.bpm)}\n%%score {R | L}\n%%barnumbers 1\nK:${key.name}\nV:R clef=treble\nV:L clef=bass\n`;
+  const marks = [];
+  const addBars = (list, i) => list.slice(i, i + 4).forEach((b, j) => {
+    if (j) abc += ' | ';
+    for (const m of b.marks) marks.push({ ...m, at: abc.length + m.at });
+    abc += b.txt;
+  });
   for (let i = 0; i < nbars; i += 4) {
     const endMark = i + 4 >= nbars ? ' |]' : ' |';
-    abc += '[V:R] ' + R.slice(i, i + 4).join(' | ') + endMark + '\n';
-    abc += '[V:L] ' + Lh.slice(i, i + 4).join(' | ') + endMark + '\n';
+    abc += '[V:R] '; addBars(R, i); abc += endMark + '\n';
+    abc += '[V:L] '; addBars(Lh, i); abc += endMark + '\n';
   }
-  return { abc, key };
+  // a mark's time in seconds is t0 + s16 * step
+  return { abc, key, marks, t0: tp.offset + shift * s16, step: s16 };
 }
 
 /* ---------------- app state ---------------- */
@@ -1349,7 +1360,7 @@ function draw() {
 }
 function frame() {
   if (rec && rec.state === 'countin' && recTime(performance.now()) >= rec.base) { rec.state = 'rec'; updateUI(); }
-  if (P && !$('#prac').hidden) { tickRun(); if (needDraw || P.run) { needDraw = false; drawFall(); } }
+  if (P && !$('#prac').hidden) { tickRun(); litSheet(); if (needDraw || P.run) { needDraw = false; drawFall(); } }
   else if (needDraw || play || (rec && rec.state !== 'paused')) { needDraw = false; draw(); }
   requestAnimationFrame(frame);
 }
@@ -1625,8 +1636,21 @@ function renderPSheet() {
   const beats = (it.tempo && it.tempo.beats) || 4;
   const tmp = { name: '', notes: notes.map((n) => ({ ...n, t: n.t - P.bars[k], h: handOf(it, n) })), split: it.split, tempo: { bpm: 60 * beats / (bd || 2), beats, offset: 0 } };
   try {
-    const abc = buildAbc(tmp).abc.replace(/^T:.*\n/m, '').replace(/^Q:.*\n/m, '').replace('V:L clef=bass\n', 'V:L clef=bass\n%%setbarnb ' + (k + 1) + '\n');
-    ABCJS.renderAbc(el, abc, { responsive: "resize", staffwidth: 1300, paddingtop: 24, paddingbottom: 16, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
+    const built = buildAbc(tmp);
+    const abc = built.abc.replace(/^T:.*\n/m, '').replace(/^Q:.*\n/m, '').replace('V:L clef=bass\n', 'V:L clef=bass\n%%setbarnb ' + (k + 1) + '\n');
+    const tunes = ABCJS.renderAbc(el, abc, { responsive: "resize", staffwidth: 1300, paddingtop: 24, paddingbottom: 16, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
+    // match each drawn note to its time, through where it sits in the notation text
+    const delta = abc.indexOf('[V:R] ') - built.abc.indexOf('[V:R] ');
+    const byAt = new Map(built.marks.map((m) => [m.at + delta, m]));
+    P.sheetMap = []; P.sheetLit = new Set();
+    for (const line of (tunes && tunes[0] && tunes[0].lines) || []) for (const stf of line.staff || []) for (const voice of stf.voices || []) for (const ne of voice) {
+      if (ne.el_type !== 'note' || ne.rest || !ne.abselem) continue;
+      let m = byAt.get(ne.startChar);
+      for (let d = 1; !m && d <= 4; d++) m = byAt.get(ne.startChar - d) || byAt.get(ne.startChar + d);
+      if (!m) continue;
+      const t = P.bars[k] + built.t0 + m.s16 * built.step;
+      P.sheetMap.push({ t, end: t + m.len * built.step, els: (ne.abselem.elemset || []).filter(Boolean) });
+    }
   } catch (e) { el.innerHTML = '<p class="empty">Could not write these bars out.</p>'; }
 }
 
@@ -1794,6 +1818,21 @@ function showResult(res, prog) {
   box.appendChild(acts); box.hidden = false;
 }
 
+
+// light up the notes in the practice sheet music that sound right now
+function litSheet() {
+  if (!P || !P.sheetMap || !PR.sheet) return;
+  const r = P.run; const now = new Set();
+  if (r) P.sheetMap.forEach((m, i) => { if (m.t <= r.songT + 1e-3 && r.songT < m.end - 1e-3) now.add(i); });
+  let first = null;
+  for (const i of P.sheetLit) if (!now.has(i)) P.sheetMap[i].els.forEach((e) => e.classList.remove('lit'));
+  for (const i of now) { if (!P.sheetLit.has(i)) { P.sheetMap[i].els.forEach((e) => e.classList.add('lit')); if (!first) first = P.sheetMap[i].els[0]; } }
+  P.sheetLit = now;
+  if (first) {  // keep the lit notes in view when the section spans several lines
+    const box = $('#pSheetBox'), b = box.getBoundingClientRect(), e = first.getBoundingClientRect();
+    if (e.top < b.top + 8 || e.bottom > b.bottom - 8) box.scrollTop += e.top - b.top - b.height / 3;
+  }
+}
 /* falling notes */
 const fc = $('#fall'); const fg = fc.getContext('2d'); let FW = 0, FH = 0;
 function sizeFall() {
