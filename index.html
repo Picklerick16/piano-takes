@@ -177,6 +177,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .pwork { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .psheet { flex: 0 0 auto; height: 40%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); padding: 4px 16px; position: relative; }
 /* drag handle between the sheet music and the falling notes */
+/* sheet music is for reading only: taps go through to scrolling instead of selecting notes */
+#pSheetOut svg, #sheetOut svg { pointer-events: none; }
 #pSheetOut .lit, #pSheetOut .lit * { fill: #d0342c !important; }
 .psplit { flex: none; height: 22px; display: flex; align-items: center; justify-content: center; background: var(--panel); border-block: 1px solid var(--line); cursor: row-resize; touch-action: none; }
 .psplit::before { content: ""; width: 56px; height: 5px; border-radius: 3px; background: var(--muted); opacity: .6; }
@@ -921,6 +923,7 @@ function buildAbc(it) {
     });
   };
   const R = staff('R'), Lh = staff('L');
+  R.forEach((b) => b.marks.forEach((m) => (m.h = 'R'))); Lh.forEach((b) => b.marks.forEach((m) => (m.h = 'L')));
   const title = (it.name || '').replace(/[\r\n%]/g, ' ');
   let abc = `X:1\nT:${title}\nM:${tp.beats}/4\nL:1/16\nQ:1/4=${Math.round(tp.bpm)}\n%%score {R | L}\n%%barnumbers 1\nK:${key.name}\nV:R clef=treble\nV:L clef=bass\n`;
   const marks = [];
@@ -1468,7 +1471,7 @@ function renderSheet() {
   if (!it.tempo) { it.tempo = estimateTempo(it); save(); updateUI(); dirty(); }
   try {
     const { abc, key } = buildAbc(it);
-    ABCJS.renderAbc(el, abc, { responsive: 'resize', add_classes: true, staffwidth: 900, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
+    ABCJS.renderAbc(el, abc, { selectTypes: false, responsive: 'resize', add_classes: true, staffwidth: 900, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
     $('#keyOut').textContent = 'Key: ' + key.label + (it.tempo.guessed ? ' · tempo guessed, adjust it if the bars look wrong' : '');
   } catch (err) { el.innerHTML = '<p class="empty">Could not write this out as sheet music.</p>'; console.error(err); }
 }
@@ -1638,7 +1641,7 @@ function renderPSheet() {
   try {
     const built = buildAbc(tmp);
     const abc = built.abc.replace(/^T:.*\n/m, '').replace(/^Q:.*\n/m, '').replace('V:L clef=bass\n', 'V:L clef=bass\n%%setbarnb ' + (k + 1) + '\n');
-    const tunes = ABCJS.renderAbc(el, abc, { responsive: "resize", staffwidth: 1300, paddingtop: 24, paddingbottom: 16, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
+    const tunes = ABCJS.renderAbc(el, abc, { selectTypes: false, responsive: "resize", staffwidth: 1300, paddingtop: 24, paddingbottom: 16, paddingleft: 0, paddingright: 0, foregroundColor: '#16181d' });
     // match each drawn note to its time, through where it sits in the notation text
     const delta = abc.indexOf('[V:R] ') - built.abc.indexOf('[V:R] ');
     const byAt = new Map(built.marks.map((m) => [m.at + delta, m]));
@@ -1649,8 +1652,9 @@ function renderPSheet() {
       for (let d = 1; !m && d <= 4; d++) m = byAt.get(ne.startChar - d) || byAt.get(ne.startChar + d);
       if (!m) continue;
       const t = P.bars[k] + built.t0 + m.s16 * built.step;
-      P.sheetMap.push({ t, end: t + m.len * built.step, els: (ne.abselem.elemset || []).filter(Boolean) });
+      P.sheetMap.push({ t, end: t + m.len * built.step, h: m.h, els: (ne.abselem.elemset || []).filter(Boolean) });
     }
+    P.sheetStep = built.step;
   } catch (e) { el.innerHTML = '<p class="empty">Could not write these bars out.</p>'; }
 }
 
@@ -1823,7 +1827,15 @@ function showResult(res, prog) {
 function litSheet() {
   if (!P || !P.sheetMap || !PR.sheet) return;
   const r = P.run; const now = new Set();
-  if (r) P.sheetMap.forEach((m, i) => { if (m.t <= r.songT + 1e-3 && r.songT < m.end - 1e-3) now.add(i); });
+  if (r && r.mode === 'wait') {
+    // wait for me: light the notes the app is waiting for, in the hand(s) being practised
+    const st = r.steps[r.si];
+    if (st) {
+      let best = Infinity; const near = [];
+      P.sheetMap.forEach((m, i) => { if (PR.hands !== 'B' && m.h !== PR.hands) return; const d = Math.abs(m.t - st.t); if (d <= P.sheetStep * 0.75 + 0.02) { near.push([i, d]); best = Math.min(best, d); } });
+      for (const [i, d] of near) if (d <= best + 1e-6) now.add(i);
+    }
+  } else if (r) P.sheetMap.forEach((m, i) => { if (m.t <= r.songT + 1e-3 && r.songT < m.end - 1e-3) now.add(i); });
   let first = null;
   for (const i of P.sheetLit) if (!now.has(i)) P.sheetMap[i].els.forEach((e) => e.classList.remove('lit'));
   for (const i of now) { if (!P.sheetLit.has(i)) { P.sheetMap[i].els.forEach((e) => e.classList.add('lit')); if (!first) first = P.sheetMap[i].els[0]; } }
