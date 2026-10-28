@@ -303,6 +303,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <div class="edge need-note"><span class="lab">Length</span><button class="sq" data-nl="-1" aria-label="Shorter">−</button><output id="nLen">–</output><button class="sq" data-nl="1" aria-label="Longer">+</button></div>
       <span class="sel-hint" id="nHint">Tap a note to select it. Drag its right end to change the length.</span>
       <span class="grow"></span>
+      <button id="nHand" class="need-note">⇄ Switch hand</button>
+      <button id="autoHands" title="Decide for every note which hand plays it">Auto-split hands</button>
       <button id="nDel" class="danger need-note">Delete note</button>
       <button id="nDone" class="primary">Done editing</button>
     </div>
@@ -735,6 +737,45 @@ function parseMusicXML(text) {
   const ts = tsl[0]; const beats = ts && ts.den === 4 && [2, 3, 4].includes(ts.num) ? ts.num : 4;
   return { notes, pedal: ped, bars: barQ.map(toSec), tempo: { bpm: Math.round(tempos[0].bpm), beats, offset: 0, metro: false } };
 }
+
+/* Splits notes into hands by following each hand as it moves, instead of one fixed split point.
+   Notes starting together are divided at the cheapest place: a hand stretches about an octave and plays at
+   most 5 notes at once, hands don't cross, and each note prefers the hand whose last note was nearest. */
+function autoSplitHands(notes) {
+  const ns = [...notes].sort((a, b) => a.t - b.t || a.p - b.p);
+  const span = (a) => (a.length ? Math.max(...a) - Math.min(...a) : 0);
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  let cL = 50, cR = 71, lastL = 50, lastR = 71; const held = [];
+  const beat = { L: { t: null, iv: null }, R: { t: null, iv: null } };   // each hand's last onset and usual gap between notes
+  const offBeat = (h, t) => { const b = beat[h]; return b.t == null || !b.iv ? 0 : Math.min(1, Math.abs(t - b.t - b.iv) / b.iv); };
+  for (let i = 0; i < ns.length; ) {
+    const t0 = ns[i].t; const grp = [];
+    while (i < ns.length && ns[i].t - t0 < 0.04) grp.push(ns[i++]);
+    grp.sort((a, b) => a.p - b.p);
+    for (let k = held.length - 1; k >= 0; k--) if (held[k].t + held[k].d <= t0 + 0.03) held.splice(k, 1);
+    const hl = held.filter((n) => n.h === 'L').map((n) => n.p), hr = held.filter((n) => n.h === 'R').map((n) => n.p);
+    let best = null;
+    for (let k = 0; k <= grp.length; k++) {
+      const L = grp.slice(0, k).map((n) => n.p), R = grp.slice(k).map((n) => n.p);
+      const aL = L.concat(hl), aR = R.concat(hr); let cost = 0;
+      for (const [a, x] of [[aL, span(aL)], [aR, span(aR)]]) { if (x > 14) cost += 40 + (x - 14) * 6; if (a.length > 5) cost += 30 * (a.length - 5); }
+      if (L.length && hr.length && Math.max(...L) > Math.min(...hr)) cost += 25;
+      if (R.length && hl.length && Math.min(...R) < Math.max(...hl)) cost += 25;
+      for (const p of L) cost += 0.3 * Math.abs(p - cL) + 0.5 * Math.abs(p - lastL);
+      for (const p of R) cost += 0.3 * Math.abs(p - cR) + 0.5 * Math.abs(p - lastR);
+      if (L.length && R.length) cost -= 0.8 * Math.min(12, Math.min(...R) - Math.max(...L));   // split where the gap is widest
+      if (L.length) cost += 2 * offBeat('L', t0); if (R.length) cost += 2 * offBeat('R', t0);   // keep each hand's rhythm
+      if (!best || cost < best.cost) best = { k, cost };
+    }
+    grp.forEach((n, j) => { n.h = j < best.k ? 'L' : 'R'; });
+    const L = grp.filter((n) => n.h === 'L').map((n) => n.p), R = grp.filter((n) => n.h === 'R').map((n) => n.p);
+    if (L.length) { cL = cL * 0.6 + mean(L) * 0.4; lastL = L[0]; }
+    if (R.length) { cR = cR * 0.6 + mean(R) * 0.4; lastR = R[R.length - 1]; }
+    for (const [h, a] of [['L', L], ['R', R]]) if (a.length) { const b = beat[h]; if (b.t != null) { const g = t0 - b.t; if (g > 0.05 && g < 2) b.iv = b.iv ? b.iv * 0.6 + g * 0.4 : g; } b.t = t0; }
+    if (cR - cL < 7) { const m = (cL + cR) / 2; cL = m - 3.5; cR = m + 3.5; }
+    held.push(...grp);
+  }
+}
 function writeMidi(it) {
   const ppq = 480; const tp = it.tempo || { bpm: 120, beats: 4, offset: 0 };
   const spt = 60 / tp.bpm / ppq; let shift = 0;
@@ -1140,9 +1181,9 @@ function updateUI() {
   $('#noteEditBtn').setAttribute('aria-pressed', String(!!cur.noteEdit)); $('#noteEditBtn').disabled = !!recording;
   $('#selbar').hidden = !!cur.noteEdit; $('#notebar').hidden = !cur.noteEdit;
   const sn = cur.noteEdit && cur.selNote;
-  $('#nName').textContent = sn ? noteName(sn.p) : '–'; $('#nStart').textContent = sn ? fmt(sn.t) : '–'; $('#nLen').textContent = sn ? sn.d.toFixed(3) + ' s' : '–';
+  $('#nName').textContent = sn ? noteName(sn.p) + (handOf(it, sn) === 'L' ? ' · left hand' : ' · right hand') : '–'; $('#nStart').textContent = sn ? fmt(sn.t) : '–'; $('#nLen').textContent = sn ? sn.d.toFixed(3) + ' s' : '–';
   $('#nHint').hidden = !!sn; $$('#notebar .need-note').forEach((el) => { el.style.opacity = sn ? '' : '.35'; el.style.pointerEvents = sn ? '' : 'none'; });
-  $('#hint').textContent = cur.noteEdit ? 'Editing notes: tap a note to select it · drag its right end to change the length · drag empty space to scroll · pinch to zoom'
+  $('#hint').textContent = cur.noteEdit ? 'Editing notes: blue = right hand, green = left hand · tap a note to select it · drag its right end to change the length · drag empty space to scroll'
     : 'Drag in the time strip at the top to select · drag the edges to adjust · tap to move the playhead · drag the notes to scroll · pinch to zoom';
   $$('[data-x]').forEach((b) => { if (['midi', 'wav', 'png'].includes(b.dataset.x)) b.disabled = !it.notes.length; });
   $('[data-x="png"]').hidden = !it.sheet;
@@ -1230,7 +1271,7 @@ function draw() {
     const y = py(p) + 1, h = Math.max(2, rh - 2); const r = Math.min(3, h / 2, w / 2);
     g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.fill();
   };
-  for (const n of it.notes) { if (n.t > t1) continue; if (n.t + n.d < t0) continue; drawNote(n.p, n.t, n.d, n.v, colors.note); }
+  for (const n of it.notes) { if (n.t > t1) continue; if (n.t + n.d < t0) continue; drawNote(n.p, n.t, n.d, n.v, handOf(it, n) === 'L' ? colors.lh : colors.note); }
   const sn = cur.noteEdit && cur.selNote;
   if (sn) {  // selected note: outline plus a grip on its right end for changing the length
     g.globalAlpha = 1; const x = tx(sn.t), w = Math.max(2, sn.d * cur.view.pps), y = py(sn.p);
@@ -1858,6 +1899,14 @@ function noteAt(x, y) {
 }
 $('#noteEditBtn').onclick = () => { cur.noteEdit = !cur.noteEdit; cur.selNote = null; if (cur.noteEdit) cur.sel = null; updateUI(); dirty(); };
 $('#nDone').onclick = () => { cur.noteEdit = false; cur.selNote = null; updateUI(); dirty(); };
+$('#nHand').onclick = () => {
+  const n = cur.selNote; if (!n) return; pushUndo();
+  n.h = handOf(cur.item, n) === 'L' ? 'R' : 'L'; afterEdit(n.h === 'L' ? 'Now left hand' : 'Now right hand');
+};
+$('#autoHands').onclick = () => {
+  if (!cur.item.notes.length) return; stopPlayback(); pushUndo();
+  autoSplitHands(cur.item.notes); afterEdit('Hands split. Blue is right, green is left.');
+};
 $('#nDel').onclick = () => {
   const n = cur.selNote; const i = cur.item.notes.indexOf(n); if (i < 0) return;
   stopPlayback(); pushUndo(); cur.item.notes.splice(i, 1); cur.selNote = null; afterEdit('Note deleted');
