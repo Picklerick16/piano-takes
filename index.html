@@ -284,6 +284,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
           <span class="edge"><button class="sq" id="sbDown" aria-label="Slower">−</button><output id="sbOut">90</output><button class="sq" id="sbUp" aria-label="Faster">+</button></span>
           <div class="seg" id="sBeats"><button data-b="2">2/4</button><button data-b="3">3/4</button><button data-b="4">4/4</button></div>
           <button id="barAtPlayhead">Bar 1 starts at playhead</button>
+          <button id="tapBeat" title="Press Play, then tap along on every beat">Tap the beat</button>
           <button id="reEstimate">Guess tempo</button>
           <span class="lab">Hands split at</span>
           <span class="edge"><button class="sq" id="splitDown" aria-label="Lower">−</button><output id="splitOut">C4</output><button class="sq" id="splitUp" aria-label="Higher">+</button></span>
@@ -2066,12 +2067,32 @@ $('#tapBtn').onclick = () => {
 };
 $$('#beatsSeg button').forEach((b) => (b.onclick = () => { settings.beats = +b.dataset.b; saveSettings(); updateUI(); }));
 // sheet controls change the grid used for notation (notes stay where they are)
-function editTempo(fn) { const it = cur.item; if (!it.tempo) it.tempo = estimateTempo(it); pushUndo(); fn(it.tempo); it.tempo.metro = false; save(); updateUI(); dirty(); renderSheetSoon(); }
+// changing the tempo grid also replaces bar lines that came with the file, so practice sections follow the new bars
+function editTempo(fn) { const it = cur.item; if (!it.tempo) it.tempo = estimateTempo(it); pushUndo(); fn(it.tempo); it.tempo.metro = false; it.tempo.guessed = false; it.bars = null; save(); updateUI(); dirty(); renderSheetSoon(); }
 holdRepeat($('#sbDown'), () => editTempo((tp) => (tp.bpm = clamp(Math.round(tp.bpm) - 1, 30, 240))));
 holdRepeat($('#sbUp'), () => editTempo((tp) => (tp.bpm = clamp(Math.round(tp.bpm) + 1, 30, 240))));
 $$('#sBeats button').forEach((b) => (b.onclick = () => editTempo((tp) => (tp.beats = +b.dataset.b))));
 $('#barAtPlayhead').onclick = () => editTempo((tp) => (tp.offset = cur.playhead));
-$('#reEstimate').onclick = () => { pushUndo(); cur.item.tempo = estimateTempo(cur.item); save(); updateUI(); dirty(); renderSheetSoon(); toast('Tempo guessed: ♩ = ' + cur.item.tempo.bpm); };
+
+// Tap the beat: tap along while the music plays; the first tap is taken as beat 1 of a bar
+let beatTaps = [], beatTimer = 0;
+$('#tapBeat').onclick = () => {
+  if (!play) { toast('Press Play first, then tap this button on every beat. Start on a beat that feels like “1”.', 5000); return; }
+  beatTaps.push(playPos()); $('#tapBeat').textContent = 'Tapping… ' + beatTaps.length;
+  clearTimeout(beatTimer);
+  beatTimer = setTimeout(() => {
+    const taps = beatTaps; beatTaps = []; $('#tapBeat').textContent = 'Tap the beat';
+    if (taps.length < 8) { toast('Tap at least 8 beats in a row, then stop tapping for a moment.', 4000); return; }
+    const iv = taps.slice(1).map((t, i) => t - taps[i]).sort((a, b) => a - b);
+    const med = iv[Math.floor(iv.length / 2)];
+    const kept = taps.slice(1).map((t, i) => t - taps[i]).filter((g) => Math.abs(g - med) < med * 0.25);
+    const beat = kept.reduce((a, b) => a + b, 0) / kept.length;
+    const bpm = clamp(Math.round(60 / beat), 30, 240);
+    editTempo((tp) => { tp.bpm = bpm; tp.offset = taps[0]; });
+    toast('Tempo set to ♩ = ' + bpm + ', bar 1 starts at your first tap. Check the bar lines; tap again if they drift.', 5000);
+  }, 1800);
+};
+$('#reEstimate').onclick = () => { pushUndo(); cur.item.tempo = estimateTempo(cur.item); cur.item.bars = null; save(); updateUI(); dirty(); renderSheetSoon(); toast('Tempo guessed: ♩ = ' + cur.item.tempo.bpm); };
 holdRepeat($('#splitDown'), () => { cur.item.split = clamp((cur.item.split || 60) - 1, 36, 84); save(); updateUI(); renderSheetSoon(); });
 holdRepeat($('#splitUp'), () => { cur.item.split = clamp((cur.item.split || 60) + 1, 36, 84); save(); updateUI(); renderSheetSoon(); });
 // export
