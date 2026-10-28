@@ -93,6 +93,8 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: v
 .rowmore .menu { min-width: 160px; }
 #list .empty { cursor: default; color: var(--muted); display: block; line-height: 1.5; }
 .lib-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 14px; }
+/* file inputs stay in the layout (not display:none): some iPad web views only open the file picker for a rendered input */
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 .credit { font-size: 12px; color: var(--muted); margin: 0; width: 100%; }
 
 /* session */
@@ -205,7 +207,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <div class="lib-actions">
           <button id="newTake" class="primary">● New recording</button>
           <label class="btn" for="importMidi">Open a MIDI or MusicXML file</label>
-          <input type="file" id="importMidi" hidden>
+          <input type="file" id="importMidi" class="vh" tabindex="-1">
         </div>
         <h2>Your recordings and pieces</h2>
         <ul id="list"></ul>
@@ -213,7 +215,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
           <span>Everything is saved on this device<span id="storeUse"></span>.</span>
           <button id="backupBtn">Back up all</button>
           <label class="btn" for="restoreFile">Restore a backup</label>
-          <input type="file" id="restoreFile" hidden>
+          <input type="file" id="restoreFile" class="vh" tabindex="-1">
           <p class="credit">Piano sound: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0.</p>
         </div>
       </div>
