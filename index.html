@@ -1395,7 +1395,7 @@ cv.addEventListener('pointermove', (e) => {
     const n = d.note; n.d = Math.max(0.01, snapTime(xt(x), x) - n.t); cur.item.length = Math.max(cur.item.length, n.t + n.d);
     edgeScroll(x); updateUI(); dirty(); return;
   }
-  if (d.mode === 'notePending' && Math.abs(x - d.x0) > 6) d.mode = 'pan';
+  if (d.mode === 'notePending' && Math.abs(x - d.x0) > 14) d.mode = 'pan';   // fingers wobble; only a clear drag scrolls
   if (d.mode === 'handle') {
     const t = limitT(snapTime(xt(x), x)); const s = cur.sel;
     if (d.which === 'a') { s.a = t; if (s.a > s.b) { [s.a, s.b] = [s.b, s.a]; d.which = 'b'; } }
@@ -1892,9 +1892,15 @@ $('#pStart').onclick = () => { if (P.run) { stopRun(); } else startRun(false); }
 $('#pListen').onclick = () => { if (P.run) stopRun(); else startRun(true); };
 
 function noteAt(x, y) {
+  // finger-friendly: the nearest note within about a fingertip (16 px), not only one under the exact pixel
   const L = cur.layout; if (!L || y < RH || x < KW) return null;
-  const p = L.hi - Math.floor((y - RH) / L.rh); const t = xt(x); const tol = 6 / cur.view.pps; let best = null;
-  for (const n of cur.item.notes) if (n.p === p && t >= n.t - tol && t <= n.t + Math.max(n.d, 3 / cur.view.pps) + tol && (!best || n.t > best.t)) best = n;
+  let best = null, bestD = Infinity;
+  for (const n of cur.item.notes) {
+    const x0 = tx(n.t), x1 = x0 + Math.max(3, n.d * cur.view.pps), yc = RH + (L.hi - n.p + 0.5) * L.rh;
+    const dx = x < x0 ? x0 - x : x > x1 ? x - x1 : 0, dy = Math.max(0, Math.abs(y - yc) - L.rh / 2);
+    const dist = Math.hypot(dx, dy);
+    if (dist <= 16 && dist < bestD) { best = n; bestD = dist; }
+  }
   return best;
 }
 $('#noteEditBtn').onclick = () => { cur.noteEdit = !cur.noteEdit; cur.selNote = null; if (cur.noteEdit) cur.sel = null; updateUI(); dirty(); };
