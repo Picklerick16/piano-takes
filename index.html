@@ -1520,9 +1520,29 @@ function barAt(bars, t) { let lo = 0, hi = bars.length - 1; while (lo < hi) { co
 const secCount = (bars) => Math.max(1, Math.ceil(bars.length / PR.size));
 function secRange(it, bars, i) { const b0 = i * PR.size, b1 = Math.min(bars.length, b0 + PR.size); return [bars[b0], b1 < bars.length ? bars[b1] : it.length]; }
 const secLabel = (bars, i) => { const b0 = i * PR.size + 1, b1 = Math.min(bars.length, (i + 1) * PR.size); return b0 === b1 ? 'Bar ' + b0 : 'Bars ' + b0 + '–' + b1; };
-function secState(it, i) {
-  const pr = it.practice || (it.practice = {}); const k = PR.size + ':' + i * PR.size;
-  return pr[k] || (pr[k] = { step: 0, level: 0, due: 0, last: 0, runs: 0 });
+// Progress is stored per bar (it.practice.bars), so it survives changing the section length.
+// A section's state is that of its weakest bar; finishing a run writes the result to all its bars.
+function barProgress(it) {
+  const pr = it.practice || (it.practice = {});
+  if (!pr.bars) {  // older saves kept progress per section length ("4:0" = 4 bars starting at bar 0)
+    pr.bars = {};
+    for (const [k, st] of Object.entries(pr)) {
+      const m = /^(\d+):(\d+)$/.exec(k); if (!m || !st || typeof st !== 'object') continue;
+      for (let b = +m[2]; b < +m[2] + +m[1]; b++) if (!pr.bars[b] || st.step > pr.bars[b].step) pr.bars[b] = { ...st };
+    }
+  }
+  return pr.bars;
+}
+function secState(it, i, bars) {
+  const pb = barProgress(it); const n = (bars || (P && P.bars) || barStarts(it)).length;
+  const list = []; for (let b = i * PR.size; b < (i + 1) * PR.size && b < n; b++) list.push(pb[b] || { step: 0, level: 0, due: 0, last: 0, runs: 0 });
+  if (!list.length) list.push({ step: 0, level: 0, due: 0, last: 0, runs: 0 });
+  return { i, step: Math.min(...list.map((x) => x.step)), level: Math.min(...list.map((x) => x.level)),
+    due: Math.min(...list.map((x) => x.due || 0)), last: Math.max(...list.map((x) => x.last || 0)), runs: Math.max(...list.map((x) => x.runs || 0)) };
+}
+function secCommit(it, s) {
+  const pb = barProgress(it); const n = P ? P.bars.length : barStarts(it).length;
+  for (let b = s.i * PR.size; b < (s.i + 1) * PR.size && b < n; b++) pb[b] = { step: s.step, level: s.level, due: s.due, last: s.last, runs: s.runs };
 }
 function handsIn(it, bars, i) {
   const [a, b] = secRange(it, bars, i); const h = { R: false, L: false };
@@ -1538,7 +1558,7 @@ const learned = (s) => s.step >= LADDER.length;
 const isDue = (s) => learned(s) && s.due <= today();
 function planFor(it, bars) {
   const due = [], n = secCount(bars); let next = null;
-  for (let i = 0; i < n; i++) { const s = normStep(it, bars, i, secState(it, i)); if (isDue(s)) due.push(i); else if (!learned(s) && next == null) next = i; }
+  for (let i = 0; i < n; i++) { const s = normStep(it, bars, i, secState(it, i, bars)); if (isDue(s)) due.push(i); else if (!learned(s) && next == null) next = i; }
   return { due, next };
 }
 function dueCount(it) { if (!it.notes.length) return 0; return planFor(it, barStarts(it)).due.length; }
@@ -1794,6 +1814,7 @@ function applyProgress(res) {
       else { s.level = Math.max(1, s.level - 1); s.due = today() + DAY; out.msg = 'Not quite. It comes back tomorrow.'; }
     } else out.msg = 'Reviews count only with both hands, play along, at 80% or faster.';
   }
+  secCommit(it, s);
   DB.put(it).catch(() => {}); renderChips(); renderPlan(); updatePUI();
   return out;
 }
