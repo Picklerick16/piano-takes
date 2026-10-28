@@ -1582,7 +1582,7 @@ function renderChips() {
     box.appendChild(b);
   }
   const size = document.createElement('div'); size.className = 'size';
-  size.innerHTML = '<span class="lab">Section size</span><div class="seg"><button data-s="2">2</button><button data-s="4">4</button><button data-s="8">8</button></div><button id="pLink" class="toggle">Join with previous</button>';
+  size.innerHTML = '<span class="lab">Bars per section</span><div class="seg"><button data-s="1">1</button><button data-s="2">2</button><button data-s="4">4</button><button data-s="8">8</button></div><button id="pLink" class="toggle">Join with previous</button>';
   size.querySelectorAll('[data-s]').forEach((x) => { x.setAttribute('aria-pressed', String(+x.dataset.s === PR.size)); x.onclick = () => { PR.size = +x.dataset.s; saveSettings(); const p = planFor(P.item, P.bars); selectSection(p.due[0] ?? p.next ?? 0); }; });
   const link = size.querySelector('#pLink'); link.setAttribute('aria-pressed', String(P.link)); link.disabled = P.sec === 0 && !P.link;
   link.title = 'Practise this section together with the one before it, so the seam between them gets practised too';
