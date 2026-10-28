@@ -361,6 +361,9 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 <script src="vendor/abcjs-basic-min.js"></script>
 <script>
 'use strict';
+// show unexpected script errors on screen, so problems on the iPad can be reported
+window.addEventListener('error', (e) => { try { toast('Something went wrong: ' + (e.message || e) + (e.lineno ? ' (line ' + e.lineno + ')' : ''), 8000); } catch (x) {} });
+window.addEventListener('unhandledrejection', (e) => { try { toast('Something went wrong: ' + ((e.reason && e.reason.message) || e.reason), 8000); } catch (x) {} });
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
@@ -1182,7 +1185,10 @@ function updateUI() {
   $('#selbar').hidden = !!cur.noteEdit; $('#notebar').hidden = !cur.noteEdit;
   const sn = cur.noteEdit && cur.selNote;
   $('#nName').textContent = sn ? noteName(sn.p) + (handOf(it, sn) === 'L' ? ' · left hand' : ' · right hand') : '–'; $('#nStart').textContent = sn ? fmt(sn.t) : '–'; $('#nLen').textContent = sn ? sn.d.toFixed(3) + ' s' : '–';
-  $('#nHint').hidden = !!sn; $$('#notebar .need-note').forEach((el) => { el.style.opacity = sn ? '' : '.35'; el.style.pointerEvents = sn ? '' : 'none'; });
+  $('#nHint').hidden = !!sn;
+  // real disabled buttons (not inline styles), which every browser engine redraws reliably
+  $$('#notebar .need-note').forEach((el) => { if (el.tagName === 'BUTTON') el.disabled = !sn; else el.style.opacity = sn ? '' : '.35'; });
+  $$('#notebar .need-note button').forEach((b) => { b.disabled = !sn; });
   $('#hint').textContent = cur.noteEdit ? 'Editing notes: blue = right hand, green = left hand · tap a note to select it · drag its right end to change the length · drag empty space to scroll'
     : 'Drag in the time strip at the top to select · drag the edges to adjust · tap to move the playhead · drag the notes to scroll · pinch to zoom';
   $$('[data-x]').forEach((b) => { if (['midi', 'wav', 'png'].includes(b.dataset.x)) b.disabled = !it.notes.length; });
