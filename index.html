@@ -344,7 +344,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
   <div id="pasteModal" class="modal" hidden>
     <div class="box" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
       <p id="pasteTitle"><b>Paste a piece</b><br>In the browser where the piece is (for example Safari), tap ⋯ next to it and choose “Copy for another browser”. Then come back here, tap the box below, hold your finger on it and choose Paste.</p>
-      <textarea id="pasteBox" rows="4" style="width:100%;font:inherit;font-size:14px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);-webkit-user-select:text;user-select:text" aria-label="Paste the copied piece here"></textarea>
+      <textarea id="pasteBox" rows="4" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;font:inherit;font-size:14px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);-webkit-user-select:text;user-select:text" aria-label="Paste the copied piece here"></textarea>
       <div class="acts"><button id="pasteNo">Cancel</button><button id="pasteYes" class="primary">Add piece</button></div>
     </div>
   </div>
@@ -1873,16 +1873,20 @@ $$('#notebar [data-nl]').forEach((b) => holdRepeat(b, () => {
 // buttons open the pickers in script: some iPad web views ignore a label tied to a file input
 $('#importBtn').onclick = () => $('#importMidi').click();
 $('#restoreBtn').onclick = () => $('#restoreFile').click();
-$('#pasteBtn').onclick = () => { $('#pasteBox').value = ''; $('#pasteModal').hidden = false; $('#pasteBox').focus(); };
+let pasted = '';
+$('#pasteBtn').onclick = () => { pasted = ''; $('#pasteBox').value = ''; $('#pasteModal').hidden = false; $('#pasteBox').focus(); };
+// read the clipboard text straight from the paste, before the text box can change it (capitals, curly quotes)
+$('#pasteBox').addEventListener('paste', (e) => { const t = e.clipboardData && e.clipboardData.getData('text/plain'); if (t) pasted = t; });
 $('#pasteNo').onclick = () => { $('#pasteModal').hidden = true; };
 $('#pasteYes').onclick = async () => {
-  const raw = $('#pasteBox').value.trim().replace(/^piano-takes:/, '');
+  const text = (pasted || $('#pasteBox').value).replace(/[\u201c\u201d\u201e]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  const raw = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
   try {
     const data = JSON.parse(raw); const it = data && data.app === 'piano-takes' && data.item;
     if (!it || !Array.isArray(it.notes)) throw new Error();
     Object.assign(it, { id: uid(), updated: Date.now() });
     await DB.put(it); $('#pasteModal').hidden = true; await loadLibrary(); toast('Added ' + it.name);
-  } catch (e) { toast('That isn’t a copied piece. Copy it again with ⋯ → Copy for another browser.', 4500); }
+  } catch (e) { toast('That isn’t a whole copied piece (' + text.length + ' characters arrived). Copy it again with ⋯ → Copy for another browser.', 6000); }
 };
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
