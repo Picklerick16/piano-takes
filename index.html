@@ -199,6 +199,22 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; font-size: 14px; }
 .prog { margin: 0; font-size: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
 .result .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+/* reading drill */
+.dtitle { font-size: 18px; margin: 0; }
+.dbody { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.dstats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; width: min(640px, 100%); }
+.dstats div { display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 4px; }
+.dstats output { font-size: 18px; min-width: 0; }
+.dstaff { width: min(520px, 100%); min-height: 280px; background: var(--paper); color: #16181d; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; transition: box-shadow .15s; }
+.dstaff.ok { box-shadow: inset 0 0 0 4px var(--ok); } .dstaff.bad { box-shadow: inset 0 0 0 4px var(--rec); }
+#dStaff { width: 100%; display: flex; justify-content: center; } #dStaff svg { max-width: 100%; height: auto; pointer-events: none; }
+.dfb { margin: 6px 0 0; min-height: 1.5em; font-weight: 600; text-align: center; line-height: 1.5; color: #16181d; }
+.dctl { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.dtip { max-width: 60ch; text-align: center; }
+@media (max-width: 560px) { .dstats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.pplan .sess { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pplan .streak { color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 
@@ -214,6 +230,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         <div id="midiHelp" class="notice" hidden></div>
         <div class="lib-actions">
           <button id="newTake" class="primary">● New recording</button>
+          <button id="drillBtn">Reading drill</button>
           <button id="importBtn">Open a MIDI or MusicXML file</button>
           <button id="pasteBtn" title="Bring in a piece copied from this app in another browser">Paste a piece</button>
           <input type="file" id="importMidi" class="vh" tabindex="-1">
@@ -336,6 +353,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <span class="edge"><span class="lab">Speed</span><button class="sq" id="pSlow" aria-label="Slower">−</button><output id="pSpeed">100%</output><button class="sq" id="pFast" aria-label="Faster">+</button></span>
       <button id="pLoop" class="toggle" aria-pressed="false">Loop</button>
       <button id="pOther" class="toggle" aria-pressed="true" title="The iPad plays the hand you are not practising">Other hand on iPad</button>
+      <button id="pRead" class="toggle" aria-pressed="false" title="Hide the falling notes and read from the sheet music; they appear only when you get stuck">Read first</button>
       <button id="pNames" class="toggle" aria-pressed="true">Note names</button>
       <button id="pSheet" class="toggle" aria-pressed="false">Sheet music</button>
       <button id="pClick" class="toggle" aria-pressed="false" title="Metronome click in play-along mode">Click</button>
@@ -349,6 +367,27 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <div class="fall-wrap" id="fallWrap"><canvas id="fall" aria-label="Falling notes"></canvas><div class="result" id="pResult" hidden></div></div>
     </div>
     <p class="hint" id="pHint"></p>
+  </section>
+
+  <section id="drill" class="screen" hidden>
+    <header class="bar">
+      <button id="dBack" class="ghost">‹ Back</button>
+      <h1 class="dtitle">Reading drill</h1>
+      <span class="grow"></span>
+      <span class="pill" data-midi-pill></span>
+    </header>
+    <div class="dbody">
+      <div class="dstats">
+        <div><span class="lab">Time left</span><output id="dTime">–</output></div>
+        <div><span class="lab">Notes</span><output id="dCount">0</output></div>
+        <div><span class="lab">Right first time</span><output id="dAcc">–</output></div>
+        <div><span class="lab">Average time</span><output id="dAvg">–</output></div>
+        <div><span class="lab">Level</span><output id="dLevel">1</output></div>
+      </div>
+      <div class="dstaff" id="dStaffBox"><div id="dStaff"></div><p id="dFeedback" class="dfb"></p></div>
+      <div class="dctl"><div class="seg" id="dLen"><button data-m="3">3 min</button><button data-m="5">5 min</button><button data-m="8">8 min</button></div><button id="dStart" class="primary">Start</button></div>
+      <p class="note dtip">Keep your eyes on the screen, not on your hands. Find each key by feel: the groups of two and three black keys are your landmarks, and middle C is the white key just left of the group of two in the middle of the keyboard. Play exactly the key shown, in the right octave.</p>
+    </div>
   </section>
 
   <div id="toast" role="status" aria-live="polite"></div>
@@ -993,6 +1032,7 @@ function noteOn(p, v, ts) {
   if (settings.monitor) { const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.out, c.currentTime, p, v, c.currentTime + 30)); }
   if (rec && (rec.state === 'rec' || rec.state === 'countin')) rec.held.set(p, { p, v, t: Math.max(rec.base, recTime(ts)) });
   if (P && P.run) practiceNoteOn(p, v, ts);
+  if (D && D.active) drillNoteOn(p);
   dirty();
 }
 function noteOff(p, ts) {
@@ -1505,7 +1545,10 @@ const LADDER = [
 const REVIEW_DAYS = [0, 1, 2, 4, 7, 14, 30, 60, 120];
 const DAY = 86400000;
 const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
-settings.pr = Object.assign({ hands: 'R', mode: 'wait', speed: 1, loop: false, names: true, sheet: false, click: false, other: true, size: 4, sheetH: 0.4 }, settings.pr || {});
+settings.pr = Object.assign({ hands: 'R', mode: 'wait', speed: 1, loop: false, names: true, sheet: false, click: false, other: true, size: 4, sheetH: 0.4, readFirst: false, sessionMin: 20, drillOn: true, drillMin: 5 }, settings.pr || {});
+settings.drill = Object.assign({ level: 0, stats: {}, recent: [] }, settings.drill || {});   // reading drill progress
+settings.rt = settings.rt || [];    // recent reading times per note in Read first, in seconds
+settings.log = settings.log || {};  // practice minutes per day, 'YYYY-MM-DD' -> minutes
 const PR = settings.pr;
 let P = null;   // practice session: { item, bars, iv, sec, link, drill, range, run, keyState, loopToken }
 const handOf = (it, n) => n.h || (n.p >= (it.split || 60) ? 'R' : 'L');
@@ -1563,7 +1606,7 @@ function planFor(it, bars) {
 }
 function dueCount(it) { if (!it.notes.length) return 0; return planFor(it, barStarts(it)).due.length; }
 
-function showScreen(name) { for (const id of ['lib', 'ses', 'prac']) $('#' + id).hidden = id !== name; }
+function showScreen(name) { for (const id of ['lib', 'ses', 'prac', 'drill']) $('#' + id).hidden = id !== name; }
 function openPractice(it) {
   if (!it.split) it.split = 60;
   if (rec) pauseRecording(true); if (play) stopPlayback();
@@ -1572,7 +1615,7 @@ function openPractice(it) {
   showScreen('prac'); $('#pTitle').textContent = it.name;
   sizeFall(); selectSection(plan.due.length ? plan.due[0] : plan.next != null ? plan.next : 0);
 }
-function closePractice() { stopRun(); if (P) DB.put(P.item).catch(() => {}); P = null; showScreen('lib'); loadLibrary(); }
+function closePractice() { if (G) endSession('', true); stopRun(); if (P) DB.put(P.item).catch(() => {}); P = null; showScreen('lib'); loadLibrary(); }
 function selectSection(i, keepPrefs) {
   stopRun(); const it = P.item; P.sec = i; P.drill = null;
   P.range = P.link && i > 0 ? [secRange(it, P.bars, i - 1)[0], secRange(it, P.bars, i)[1]] : secRange(it, P.bars, i);
@@ -1619,6 +1662,19 @@ function renderChips() {
 function renderPlan() {
   const it = P.item; const plan = planFor(it, P.bars); const box = $('#pPlan'); box.innerHTML = '';
   const lab = document.createElement('span'); lab.className = 'lab'; lab.textContent = 'Today'; box.appendChild(lab);
+  const sess = document.createElement('span'); sess.className = 'sess';
+  if (G) sess.innerHTML = '<b>Today’s practice is running</b>';
+  else {
+    sess.innerHTML = '<button class="primary" data-go>▶ Today’s practice</button><span class="edge"><button class="sq" data-min="-5" aria-label="Shorter">−</button><output></output><button class="sq" data-min="5" aria-label="Longer">+</button></span><button class="toggle" data-drill title="Start with a few minutes of reading drill">Reading drill first</button>';
+    sess.querySelector('output').textContent = PR.sessionMin + ' min';
+    sess.querySelector('[data-go]').onclick = startSession;
+    sess.querySelectorAll('[data-min]').forEach((x) => (x.onclick = () => { PR.sessionMin = clamp(PR.sessionMin + +x.dataset.min, 10, 60); saveSettings(); renderPlan(); }));
+    const dr = sess.querySelector('[data-drill]'); dr.setAttribute('aria-pressed', String(PR.drillOn)); dr.onclick = () => { PR.drillOn = !PR.drillOn; saveSettings(); renderPlan(); };
+  }
+  box.appendChild(sess);
+  const ps = practiceStats(); const sk = document.createElement('span'); sk.className = 'streak';
+  sk.textContent = 'This week ' + ps.week + ' min' + (ps.streak ? ' · ' + ps.streak + '-day streak' : '');
+  box.appendChild(sk);
   if (!plan.due.length && plan.next == null) { const t = document.createElement('span'); t.textContent = 'Every section is learned and nothing is due. Play the whole piece, or come back tomorrow.'; box.appendChild(t); return; }
   for (const i of plan.due) { const b = document.createElement('button'); b.className = 'due'; b.textContent = 'Review ' + secLabel(P.bars, i); b.onclick = () => selectSection(i); box.appendChild(b); }
   if (plan.next != null) {
@@ -1635,12 +1691,13 @@ function updatePUI() {
   $('#pSpeed').textContent = Math.round(PR.speed * 100) + '%';
   $('#pLoop').setAttribute('aria-pressed', String(PR.loop)); $('#pNames').setAttribute('aria-pressed', String(PR.names));
   $('#pSheet').setAttribute('aria-pressed', String(PR.sheet)); $('#pClick').setAttribute('aria-pressed', String(PR.click));
+  $('#pRead').setAttribute('aria-pressed', String(PR.readFirst)); $('#pRead').disabled = PR.mode !== 'wait';
   $('#pOther').setAttribute('aria-pressed', String(PR.other)); $('#pOther').disabled = PR.hands === 'B';
   $('#pClick').disabled = PR.mode !== 'along';
   $('#pSheetBox').hidden = !PR.sheet; $('#pSplit').hidden = !PR.sheet;
   $('#pSheetBox').style.height = Math.round(PR.sheetH * 100) + '%';
   const running = !!P.run;
-  $('#pStart').textContent = running && P.run.mode !== 'listen' ? '■ Stop' : 'Start';
+  $('#pStart').textContent = G ? '■ End session' : running && P.run.mode !== 'listen' ? '■ Stop' : 'Start';
   $('#pListen').textContent = running && P.run.mode === 'listen' ? '■ Stop' : '▶ Listen';
   $('#pStart').disabled = running && P.run.mode === 'listen'; $('#pListen').disabled = running && P.run.mode !== 'listen';
   $$('#pHands button, #pMode button, #pSlow, #pFast, #pChips button').forEach((b) => { if (running) b.disabled = true; else if (b.id !== 'pLink') b.disabled = false; });
@@ -1654,6 +1711,7 @@ function updatePUI() {
     else if (learned(s)) h = lab + ' is learned. It comes back for review in ' + Math.max(1, Math.round((s.due - today()) / DAY)) + ' day(s). Playing it now is fine but doesn’t change the schedule.';
     else h = 'Step ' + (s.step + 1) + ' of ' + LADDER.length + ' for ' + lab + ': ' + LADDER[s.step].label + '. Pass with 90% clean notes to unlock the next step.';
   }
+  if (G) h = 'Today’s practice · ' + Math.max(0, Math.ceil((G.endAt - Date.now()) / 60000)) + ' min left · ' + h;
   $('#pHint').textContent = h;
 }
 function renderPSheet() {
@@ -1720,6 +1778,12 @@ function tickRun() {
     let nt = r.songT + dt * sp; const st = r.steps[r.si];
     if (st && nt > st.t) { if (r.songT >= st.t - 1e-9) st.wait += dt; nt = Math.max(r.songT, st.t); }
     r.songT = nt;
+    const cs = r.steps[r.si];
+    if (cs && r.songT >= cs.t - 1e-9) {
+      if (!cs.armed) cs.armed = now;
+      // read first: reveal the falling notes after 2 wrong keys, or after waiting 3x my usual time per note
+      if (PR.readFirst && !cs.hint && ((cs.wrongHere || 0) >= 2 || now - cs.armed > hintDelay() * 1000)) { cs.hint = true; r.hints = (r.hints || 0) + 1; dirty(); }
+    }
     while (r.ai < r.auto.length && r.auto[r.ai].t <= r.songT) { const n = r.auto[r.ai++]; const w = c.currentTime; r.voices.push(Piano.voice(c, Piano.out, w, n.p, n.v, w + (n.off - n.t) / sp)); }
     if (r.si >= r.steps.length && r.songT >= r.endT) finishRun();
   } else {
@@ -1743,8 +1807,11 @@ function practiceNoteOn(p, v, ts) {
     const st = r.steps[r.si]; if (!st) return;
     if (st.ps.has(p)) {
       st.got.add(p); P.keyState.set(p, 'ok');
-      if (st.got.size === st.ps.size) { r.si++; r.songT = Math.max(r.songT, st.t); st.notes.forEach((n) => { n.hit = true; n.ok = st.clean; }); }
-    } else { r.wrong++; st.clean = false; r.wrongAt.push(st.t); P.keyState.set(p, 'bad'); }
+      if (st.got.size === st.ps.size) {
+        r.si++; r.songT = Math.max(r.songT, st.t); st.notes.forEach((n) => { n.hit = true; n.ok = st.clean; });
+        if (st.armed) { st.took = (performance.now() - st.armed) / 1000; if (PR.readFirst && !st.hint) recordRT(st.took); }
+      }
+    } else { r.wrong++; st.clean = false; st.wrongHere = (st.wrongHere || 0) + 1; r.wrongAt.push(st.t); P.keyState.set(p, 'bad'); }
   } else {
     const sp = PR.speed; const t = r.t0 + (ts - r.perf0) / 1000 * sp; const win = 0.18 * sp; let best = null;
     for (const n of r.mine) { if (n.hit || n.p !== p) continue; const d = Math.abs(n.t - t); if (d <= win && (!best || d < Math.abs(best.t - t))) best = n; }
@@ -1761,6 +1828,9 @@ function evaluate(r) {
     res.waitTotal = r.steps.reduce((x, s) => x + s.wait, 0);
     r.steps.forEach((s) => add(s.t, s.wait + (s.clean ? 0 : 1.5)));
     res.pass = res.N > 0 && res.acc >= 0.9;
+    res.readFirst = PR.readFirst; res.hints = r.hints || 0;
+    const took = r.steps.filter((x) => x.took != null && !x.hint).map((x) => x.took);
+    res.perNote = took.length ? took.reduce((a, b) => a + b, 0) / took.length : null;
   } else {
     res.N = r.mine.length; const hits = r.mine.filter((n) => n.hit); res.missed = res.N - hits.length;
     res.acc = res.N ? hits.length / res.N : 1; res.wrongRate = res.N ? r.wrong / res.N : 0;
@@ -1782,6 +1852,7 @@ function coachTips(res) {
     if (res.acc < 0.7) t.push('Many wrong keys. Before each chord, look at the next two or three notes and name them, then press. Wait mode waits, so slow is fine; wrong is what slows learning.');
     else if (!res.pass) t.push('Close. Play it again and aim for zero wrong keys rather than speed.');
     if (res.weakBar != null) t.push('Bar ' + (res.weakBar + 1) + ' cost you the most time. Drill that bar on its own three times, then play the whole section again.');
+    if (res.readFirst && res.hints > res.N * 0.3) t.push('You needed the falling notes for ' + res.hints + ' of ' + res.N + ' notes. That’s normal at first: the daily reading drill is what speeds this up.');
     if (res.pass && res.waitTotal > res.N * 0.5) t.push('Clean, but with long pauses. Before moving on, play it once more and try to keep the notes falling without stopping.');
   } else {
     if (res.acc < 0.75) t.push('Too many missed notes at ' + pct(PR.speed) + '. Go down to ' + pct(Math.max(0.3, PR.speed - 0.2)) + ', or back to wait mode for a few runs.');
@@ -1823,6 +1894,7 @@ function finishRun() {
   if (r.mode === 'listen') { updatePUI(); return; }
   const res = evaluate(r); const prog = applyProgress(res); showResult(res, prog);
   updatePUI(); dirty();
+  if (G) { sessionAfterRun(res, prog); return; }
   if (PR.loop && !prog.advanced) { const tok = ++P.loopToken; setTimeout(() => { if (P && !P.run && P.loopToken === tok && !$('#prac').hidden) startRun(false); }, 2200); }
 }
 function showResult(res, prog) {
@@ -1833,6 +1905,7 @@ function showResult(res, prog) {
   const stat = (k, v) => { const d = document.createElement('div'); d.innerHTML = '<dt></dt><dd></dd>'; d.firstChild.textContent = k; d.lastChild.textContent = v; dl.appendChild(d); };
   stat('Wrong keys', res.wrong);
   if (res.mode === 'wait') stat('Time waiting', res.waitTotal.toFixed(1) + ' s');
+  if (res.mode === 'wait' && res.readFirst) { stat('Needed falling notes', res.hints + ' of ' + res.N); if (res.perNote != null) stat('Reading time per note', res.perNote.toFixed(1) + ' s'); }
   else { stat('Missed', res.missed); stat('Timing', (res.mean >= 0 ? '+' : '−') + Math.abs(Math.round(res.mean)) + ' ms'); stat('Steadiness', '±' + Math.round(res.sd) + ' ms'); }
   const ul = document.createElement('ul'); ul.className = 'tips';
   for (const tip of coachTips(res)) { const li = document.createElement('li'); li.textContent = tip; ul.appendChild(li); }
@@ -1905,8 +1978,11 @@ function drawFall() {
   // notes
   const list = r ? r.notes : it.notes.filter((n) => n.t >= P.range[0] - 1e-6 && n.t < P.range[1] - 1e-6).map((n) => ({ ...n, hand: handOf(it, n) }));
   const mineHand = (n) => PR.hands === 'B' || n.hand === PR.hands;
+  const rf = PR.readFirst && (r ? r.mode === 'wait' : PR.mode === 'wait');
+  const cst = r && r.mode === 'wait' ? r.steps[r.si] : null; const hinted = !!(rf && cst && cst.hint);
   fg.textBaseline = 'bottom'; fg.textAlign = 'center';
   for (const n of list) {
+    if (rf && mineHand(n) && !(hinted && cst.notes.includes(n))) continue;   // read first: only the stuck note, and only after the hint
     const y0 = y(n.t), y1 = y(n.t + n.d); if (y1 > hitY + 40 || y0 < -10) continue;
     const x = keyX(n.p) + 1, w = keyW(n.p) - 2, top = y1, h = Math.max(4, y0 - y1);
     let col = n.hand === 'R' ? colors.accent : colors.lh, a = mineHand(n) ? 1 : 0.28;
@@ -1917,7 +1993,7 @@ function drawFall() {
   }
   fg.globalAlpha = 1; fg.textAlign = 'left';
   // keyboard
-  const want = r && r.mode === 'wait' && r.steps[r.si] ? r.steps[r.si].ps : null;
+  const want = r && r.mode === 'wait' && r.steps[r.si] && (!rf || hinted) ? r.steps[r.si].ps : null;
   // keys the iPad is sounding (other hand, or Listen) light up in their hand's colour
   const sounding = new Map();
   if (r) for (const n of r.auto) if (n.t <= songT && songT < n.t + n.d) sounding.set(n.p, n.hand === 'R' ? colors.accent : colors.lh);
@@ -1935,8 +2011,183 @@ function drawFall() {
   }
   if (!r && list.length && $('#pResult').hidden) {
     fg.fillStyle = colors.muted; fg.font = '15px ' + font; fg.textAlign = 'center'; fg.textBaseline = 'middle';
-    fg.fillText('Press Start, or Listen to hear these bars first.', FW / 2, hitY * 0.35); fg.textAlign = 'left';
+    fg.fillText(rf ? 'Read first: play from the sheet music. The falling notes only appear when you get stuck.' : 'Press Start, or Listen to hear these bars first.', FW / 2, hitY * 0.35); fg.textAlign = 'left';
   }
+}
+
+
+/* ---------------- practice log ---------------- */
+const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function logMinutes(m) { if (!(m > 0.2)) return; const k = dayKey(); settings.log[k] = Math.round(((settings.log[k] || 0) + m) * 10) / 10; saveSettings(); }
+function practiceStats() {
+  const log = settings.log; let week = 0;
+  for (let i = 0; i < 7; i++) { const d = new Date(); d.setDate(d.getDate() - i); week += log[dayKey(d)] || 0; }
+  let streak = 0; const d = new Date(); if (!log[dayKey(d)]) d.setDate(d.getDate() - 1);
+  while (log[dayKey(d)] > 0) { streak++; d.setDate(d.getDate() - 1); }
+  return { week: week > 0 && week < 1 ? '<1' : Math.round(week), streak };
+}
+// read first: my usual time per note sets how long to wait before showing the falling notes
+function hintDelay() { const a = settings.rt.slice().sort((x, y) => x - y); if (a.length < 5) return 8; return clamp(a[Math.floor(a.length / 2)] * 3, 5, 12); }
+function recordRT(sec) { settings.rt = settings.rt.concat(Math.min(sec, 30)).slice(-60); saveSettings(); }
+
+/* ---------------- today's practice: one button, the app decides what comes next ---------------- */
+let G = null;
+function startSession() {
+  if (!P) return; stopRun(); P.link = false;
+  G = { start: Date.now(), endAt: Date.now() + PR.sessionMin * 60000, fails: 0, sec: null, drillBar: null, drillRuns: 0, reviews: [], steps: 0, drill: null, token: 0 };
+  renderPlan(); updatePUI();
+  if (PR.drillOn) openDrill({ minutes: clamp(Math.round(PR.sessionMin / 4), 2, 5), onDone: (sum) => {
+    if (!G) return; G.drill = sum; showScreen('prac'); requestAnimationFrame(() => { sizeFall(); dirty(); sessionNext(); });
+  } });
+  else sessionNext();
+}
+function sessionNext() {
+  if (!G || !P) return;
+  if (Date.now() >= G.endAt) return endSession('Time’s up.');
+  const plan = planFor(P.item, P.bars);
+  if (plan.due.length) { const i = plan.due[0]; return sessionQueue('review ' + secLabel(P.bars, i), () => { G.phase = 'review'; selectSection(i); }); }
+  if (plan.next != null) {
+    const i = plan.next; const st = normStep(P.item, P.bars, i, secState(P.item, i));
+    return sessionQueue(secLabel(P.bars, i) + ', ' + LADDER[st.step].label.toLowerCase(), () => { if (G.sec !== i) G.fails = 0; G.sec = i; G.phase = 'learn'; selectSection(i); });
+  }
+  endSession('Every section is learned and nothing is due.');
+}
+// shows what comes next with a short countdown, then starts it (or "Start now")
+function sessionQueue(label, action, secs = 4) {
+  const tok = ++G.token; const box = $('#pResult');
+  if (box.hidden) { box.innerHTML = ''; box.hidden = false; }
+  const old = box.querySelector('.acts:not(.sacts)'); if (old) old.remove();
+  let line = box.querySelector('.cd'); if (!line) { line = document.createElement('p'); line.className = 'prog cd'; box.appendChild(line); }
+  let bar = box.querySelector('.sacts');
+  if (!bar) { bar = document.createElement('div'); bar.className = 'acts sacts'; bar.innerHTML = '<button class="primary" data-go>Start now</button><button data-end>End session</button>'; box.appendChild(bar); }
+  let n = secs;
+  const go = () => { if (!G || G.token !== tok) return; G.token++; action(); $('#pResult').hidden = true; if (G) startRun(false); };
+  bar.querySelector('[data-go]').onclick = go;
+  bar.querySelector('[data-end]').onclick = () => endSession('Ended early.');
+  const tick = () => { if (!G || G.token !== tok) return; if (n <= 0) return go(); line.textContent = 'Next: ' + label + ' · starts in ' + n + ' s'; n--; setTimeout(tick, 1000); };
+  tick();
+}
+function sessionAfterRun(res, prog) {
+  if (!G) return;
+  if (P.drill != null && G.drillBar != null) {   // drilling the hardest bar, twice, then back to the section
+    G.drillRuns++;
+    if (G.drillRuns < 2 && Date.now() < G.endAt) { const k = G.drillBar; return sessionQueue('bar ' + (k + 1) + ' once more', () => drillBar(k)); }
+    G.drillBar = null; G.fails = 0; return sessionNext();
+  }
+  if (G.phase === 'review') { G.reviews.push(res.pass); return sessionNext(); }
+  if (prog.advanced) { G.steps++; G.fails = 0; return sessionNext(); }
+  if (Date.now() >= G.endAt) return endSession('Time’s up.');
+  G.fails++;
+  if (G.fails >= 3 && res.weakBar != null) { G.fails = 0; G.drillBar = res.weakBar; G.drillRuns = 0; const k = res.weakBar; return sessionQueue('bar ' + (k + 1) + ' on its own (your hardest spot)', () => drillBar(k)); }
+  sessionQueue('the same again, aim for fewer wrong keys', () => {});
+}
+function endSession(msg, quiet) {
+  if (!G) return; const g = G; G = null; g.token++;
+  if (P && P.run) stopRun();
+  const min = (Date.now() - g.start) / 60000; logMinutes(min);
+  if (quiet || !P) return;
+  if (P.drill != null) selectSection(P.sec, true);
+  const box = $('#pResult'); box.innerHTML = '';
+  const h = document.createElement('div'); h.className = 'rc-head'; h.innerHTML = '<span class="badge pass">Session done</span><strong></strong>';
+  h.querySelector('strong').textContent = Math.max(1, Math.round(min)) + ' min';
+  const dl = document.createElement('dl'); dl.className = 'stats';
+  const stat = (k, v) => { const d = document.createElement('div'); d.innerHTML = '<dt></dt><dd></dd>'; d.firstChild.textContent = k; d.lastChild.textContent = v; dl.appendChild(d); };
+  if (g.reviews.length) stat('Reviews passed', g.reviews.filter(Boolean).length + ' of ' + g.reviews.length);
+  stat('Steps moved up', g.steps);
+  if (g.drill) { stat('Drill notes', g.drill.notes); stat('Drill, right first time', g.drill.acc); stat('Drill, average time', g.drill.avg); }
+  const ps = practiceStats(); stat('This week', ps.week + ' min'); if (ps.streak) stat('Streak', ps.streak + ' days');
+  box.append(h, dl);
+  const p = document.createElement('p'); p.className = 'prog'; const plan = planFor(P.item, P.bars);
+  p.textContent = (msg ? msg + ' ' : '') + (plan.next != null ? 'Next time you continue with ' + secLabel(P.bars, plan.next) + '.' : '') ; box.appendChild(p);
+  const acts = document.createElement('div'); acts.className = 'acts'; const c = document.createElement('button'); c.textContent = 'Close'; c.onclick = () => (box.hidden = true); acts.appendChild(c); box.appendChild(acts);
+  box.hidden = false; renderPlan(); updatePUI();
+}
+
+/* ---------------- reading drill: a note appears on the staff, find its key without looking ---------------- */
+const NAT_PC = { 0: 'C', 2: 'D', 4: 'E', 5: 'F', 7: 'G', 9: 'A', 11: 'B' };
+const DRILL_LEVELS = [
+  { name: 'C to G above middle C', notes: [60, 62, 64, 65, 67].map((p) => ({ p, clef: 't' })) },
+  { name: 'F to C below middle C (bass clef)', notes: [53, 55, 57, 59, 60].map((p) => ({ p, clef: 'b' })) },
+  { name: 'treble clef up to G', notes: [69, 71, 72, 74, 76, 77, 79].map((p) => ({ p, clef: 't' })) },
+  { name: 'bass clef down to G', notes: [52, 50, 48, 47, 45, 43].map((p) => ({ p, clef: 'b' })) },
+  { name: 'ledger lines', notes: [81, 83, 84].map((p) => ({ p, clef: 't' })).concat([41, 40, 38, 36].map((p) => ({ p, clef: 'b' }))) },
+  { name: 'sharps and flats', notes: [61, 63, 66, 68, 70, 73, 75].map((p) => ({ p, clef: 't' })).concat([44, 46, 49, 51, 54, 56, 58].map((p) => ({ p, clef: 'b' }))) },
+];
+const DS = settings.drill;
+let D = null;
+function spellNote(p, pref) {
+  let pc = p % 12, a = 0; if (!(pc in NAT_PC)) { a = pref < 0 ? -1 : 1; pc = (pc - a + 12) % 12; }
+  const L = NAT_PC[pc], oct = Math.floor((p - a) / 12) - 1;
+  return { abc: (a === 1 ? '^' : a === -1 ? '_' : '') + (oct >= 5 ? L.toLowerCase() + "'".repeat(oct - 5) : L + ','.repeat(4 - oct)), name: L + (a === 1 ? '♯' : a === -1 ? '♭' : '') + oct };
+}
+function drillPool() { const out = []; for (let i = 0; i <= DS.level && i < DRILL_LEVELS.length; i++) out.push(...DRILL_LEVELS[i].notes); return out; }
+function drillPick() {   // slower and more often-missed notes come up more often
+  const pool = drillPool(); let tot = 0;
+  const w = pool.map((n) => { const st = DS.stats[n.clef + n.p] || { t: 3, err: 0.3 }; const x = n.clef + n.p === D.prev ? 0 : 0.5 + st.t / 2 + st.err * 3; tot += x; return x; });
+  let r = Math.random() * tot; for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; } return pool[pool.length - 1];
+}
+function openDrill(opts = {}) {
+  D = { minutes: opts.minutes || PR.drillMin, onDone: opts.onDone || null, active: false, answers: [], prev: null, cur: null, wrongs: 0 };
+  showScreen('drill'); drillStats();
+  $('#dStaff').innerHTML = ''; $('#dFeedback').textContent = opts.onDone ? 'Today’s practice starts with ' + D.minutes + ' minutes of reading.' : 'Pick a length and press Start.';
+  $('#dLen').hidden = !!opts.onDone; $$('#dLen button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.m === D.minutes)));
+  $('#dStart').textContent = 'Start'; $('#dStart').hidden = false;
+  if (opts.onDone) setTimeout(() => { if (D && !D.active && D.onDone) drillStart(); }, 1500);
+}
+function drillStart() {
+  if (!D) return; D.active = true; D.start = Date.now(); D.endAt = Date.now() + D.minutes * 60000; D.answers = [];
+  $('#dStart').textContent = '■ Stop'; $('#dLen').hidden = true;
+  clearInterval(D.timer); D.timer = setInterval(drillStats, 500); drillNext();
+}
+function drillNext() {
+  if (!D || !D.active) return;
+  if (Date.now() >= D.endAt) return drillFinish();
+  const n = drillPick(); const sp = spellNote(n.p, Math.random() < 0.5 ? 1 : -1);
+  D.cur = { ...n, ...sp, key: n.clef + n.p }; D.prev = D.cur.key; D.wrongs = 0; D.shownAt = performance.now();
+  const note = sp.abc + '4';
+  const abc = 'X:1\nL:1/4\n%%score {R | L}\nK:C\nV:R clef=treble\nV:L clef=bass\n[V:R] ' + (n.clef === 't' ? note : 'x4') + ' |]\n[V:L] ' + (n.clef === 'b' ? note : 'x4') + ' |]\n';
+  try { ABCJS.renderAbc('dStaff', abc, { scale: 2, staffwidth: 170, selectTypes: false, paddingtop: 10, paddingbottom: 10, paddingleft: 10, paddingright: 10, foregroundColor: '#16181d' }); }
+  catch (e) { $('#dStaff').textContent = sp.name; }
+  $('#dFeedback').textContent = ''; $('#dStaffBox').className = 'dstaff';
+}
+function drillNoteOn(p) {
+  const c = D.cur; if (!c) return;
+  if (p === c.p) {
+    const rt = (performance.now() - D.shownAt) / 1000, first = D.wrongs === 0; const st = DS.stats[c.key];
+    DS.stats[c.key] = st ? { t: st.t * 0.7 + rt * 0.3, err: st.err * 0.7 + (first ? 0 : 0.3), n: st.n + 1 } : { t: rt, err: first ? 0 : 1, n: 1 };
+    D.answers.push({ name: c.name, rt, first });
+    DS.recent = DS.recent.concat({ ok: first, rt }).slice(-20);
+    // level up after 20 answers with 90% right first time and a typical time of 2 seconds or less
+    const okRate = DS.recent.filter((x) => x.ok).length / DS.recent.length, med = DS.recent.map((x) => x.rt).sort((a, b) => a - b)[Math.floor(DS.recent.length / 2)];
+    if (DS.recent.length >= 20 && okRate >= 0.9 && med <= 2 && DS.level < DRILL_LEVELS.length - 1) { DS.level++; DS.recent = []; toast('Level up: now with ' + DRILL_LEVELS[DS.level].name + '.', 4000); }
+    saveSettings();
+    $('#dStaffBox').className = 'dstaff ok'; $('#dFeedback').textContent = c.name + (first ? ' ✓' : ''); D.cur = null; drillStats();
+    setTimeout(drillNext, first ? 300 : 900);
+  } else {
+    D.wrongs++; $('#dStaffBox').className = 'dstaff bad';
+    $('#dFeedback').textContent = D.wrongs >= 2 ? 'It’s ' + c.name + '. Find it by feel.' : 'Not that one. Try again.';
+  }
+}
+function drillStats() {
+  if (!D) return; const a = D.answers;
+  $('#dTime').textContent = D.active ? fmt(Math.max(0, (D.endAt - Date.now()) / 1000)).replace(/\.\d+$/, '') : D.minutes + ':00';
+  $('#dCount').textContent = a.length;
+  $('#dAcc').textContent = a.length ? Math.round(a.filter((x) => x.first).length / a.length * 100) + '%' : '–';
+  $('#dAvg').textContent = a.length ? (a.reduce((x, y) => x + y.rt, 0) / a.length).toFixed(1) + ' s' : '–';
+  $('#dLevel').textContent = (DS.level + 1) + ' of ' + DRILL_LEVELS.length;
+  if (D.active && Date.now() >= D.endAt && D.cur) drillFinish();
+}
+function drillFinish() {
+  if (!D || !D.active) return; D.active = false; clearInterval(D.timer); D.cur = null;
+  const a = D.answers; const min = (Date.now() - D.start) / 60000;
+  const sum = { notes: a.length, acc: a.length ? Math.round(a.filter((x) => x.first).length / a.length * 100) + '%' : '–', avg: a.length ? (a.reduce((x, y) => x + y.rt, 0) / a.length).toFixed(1) + ' s' : '–', minutes: min };
+  const slow = {}; for (const x of a) { (slow[x.name] = slow[x.name] || []).push(x.rt + (x.first ? 0 : 3)); }
+  const worst = Object.entries(slow).map(([k, v]) => [k, v.reduce((p, q) => p + q, 0) / v.length]).sort((p, q) => q[1] - p[1]).slice(0, 3).map((x) => x[0]);
+  $('#dStaff').innerHTML = ''; $('#dStaffBox').className = 'dstaff';
+  $('#dFeedback').textContent = a.length ? 'Done: ' + sum.notes + ' notes, ' + sum.acc + ' right first time, ' + sum.avg + ' on average.' + (worst.length ? ' Slowest: ' + worst.join(', ') + '.' : '') : 'Done.';
+  $('#dStart').textContent = 'Start again'; $('#dLen').hidden = !!D.onDone; drillStats();
+  if (D.onDone) { const cb = D.onDone; $('#dStart').hidden = true; $('#dFeedback').textContent += ' On to your piece…'; setTimeout(() => { D = null; cb(sum); }, 2500); }
+  else logMinutes(min);
 }
 
 /* ---------------- wiring ---------------- */
@@ -1978,7 +2229,8 @@ holdRepeat($('#pSlow'), () => { if (P.run) return; PR.speed = Math.max(0.3, Math
 holdRepeat($('#pFast'), () => { if (P.run) return; PR.speed = Math.min(1.5, Math.round(PR.speed * 10 + 1) / 10); saveSettings(); updatePUI(); dirty(); });
 for (const [id, key] of [['#pLoop', 'loop'], ['#pNames', 'names'], ['#pClick', 'click'], ['#pOther', 'other']]) $(id).onclick = () => { PR[key] = !PR[key]; if (key === 'loop' && !PR.loop) P.loopToken++; saveSettings(); updatePUI(); dirty(); };
 $('#pSheet').onclick = () => { PR.sheet = !PR.sheet; saveSettings(); updatePUI(); requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); };
-$('#pStart').onclick = () => { if (P.run) { stopRun(); } else startRun(false); };
+$('#pStart').onclick = () => { if (G) endSession('Ended early.'); else if (P.run) stopRun(); else startRun(false); };
+$('#pRead').onclick = () => { PR.readFirst = !PR.readFirst; if (PR.readFirst && !PR.sheet) { PR.sheet = true; requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); } saveSettings(); updatePUI(); dirty(); };
 $('#pListen').onclick = () => { if (P.run) stopRun(); else startRun(true); };
 
 function noteAt(x, y) {
@@ -2044,6 +2296,14 @@ $('#pasteYes').onclick = async () => {
   h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
   h.addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); setH(PR.sheetH + (e.key === 'ArrowDown' ? 0.05 : -0.05)); saveSettings(); } });
 })();
+
+$('#drillBtn').onclick = () => openDrill();
+$('#dStart').onclick = () => { if (!D) return; if (D.active) drillFinish(); else drillStart(); };
+$$('#dLen button').forEach((b) => (b.onclick = () => { PR.drillMin = +b.dataset.m; saveSettings(); if (D && !D.active) { D.minutes = PR.drillMin; drillStats(); $$('#dLen button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); } }));
+$('#dBack').onclick = () => {
+  const inSession = D && D.onDone; if (D) { D.onDone = null; if (D.active) drillFinish(); } D = null;
+  if (inSession && P) { endSession('Ended early.'); showScreen('prac'); requestAnimationFrame(sizeFall); } else { showScreen('lib'); loadLibrary(); }
+};
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
 $('#title').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
