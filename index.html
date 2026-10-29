@@ -353,6 +353,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <span class="edge"><span class="lab">Speed</span><button class="sq" id="pSlow" aria-label="Slower">−</button><output id="pSpeed">100%</output><button class="sq" id="pFast" aria-label="Faster">+</button></span>
       <button id="pLoop" class="toggle" aria-pressed="false">Loop</button>
       <button id="pOther" class="toggle" aria-pressed="true" title="The iPad plays the hand you are not practising">Other hand on iPad</button>
+      <button id="pMem" class="toggle" aria-pressed="false" title="Hide the sheet music and the falling notes; a peek appears only when you get stuck">From memory</button>
       <button id="pRead" class="toggle" aria-pressed="false" title="Hide the falling notes and read from the sheet music; they appear only when you get stuck">Read first</button>
       <button id="pNames" class="toggle" aria-pressed="true">Note names</button>
       <button id="pSheet" class="toggle" aria-pressed="false">Sheet music</button>
@@ -1557,11 +1558,12 @@ const LADDER = [
   { hands: 'B', mode: 'along', speed: 0.6, label: 'Both hands, play along at 60%' },
   { hands: 'B', mode: 'along', speed: 0.8, label: 'Both hands, play along at 80%' },
   { hands: 'B', mode: 'along', speed: 1, label: 'Both hands, play along at full speed' },
+  { hands: 'B', mode: 'wait', speed: 0, memory: true, label: 'Both hands, from memory' },
 ];
 const REVIEW_DAYS = [0, 1, 2, 4, 7, 14, 30, 60, 120];
 const DAY = 86400000;
 const today = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
-settings.pr = Object.assign({ hands: 'R', mode: 'wait', speed: 1, loop: false, names: true, sheet: false, click: false, other: true, size: 4, sheetH: 0.4, readFirst: false, sessionMin: 20, drillOn: true, drillMin: 5 }, settings.pr || {});
+settings.pr = Object.assign({ hands: 'R', mode: 'wait', speed: 1, loop: false, names: true, sheet: false, click: false, other: true, size: 4, sheetH: 0.4, readFirst: false, memory: false, sessionMin: 20, drillOn: true, drillMin: 5 }, settings.pr || {});
 settings.drill = Object.assign({ level: 0, stats: {}, recent: [] }, settings.drill || {});   // reading drill progress
 settings.rt = settings.rt || [];    // recent reading times per note in Read first, in seconds
 settings.log = settings.log || {};  // practice minutes per day, 'YYYY-MM-DD' -> minutes
@@ -1614,6 +1616,10 @@ function normStep(it, bars, i, s) {
   return s;
 }
 const learned = (s) => s.step >= LADDER.length;
+// reviews alternate: from memory (wait for me, nothing shown) and play along at 80% or faster with the sheet
+const reviewSpec = (s) => (s.level % 2 === 1 ? { mode: 'wait', memory: true, label: 'both hands, from memory' } : { mode: 'along', memory: false, label: 'both hands, play along at 80% or faster' });
+// from memory only applies in wait for me
+const memOn = (mode) => PR.memory && (mode || PR.mode) === 'wait';
 const isDue = (s) => learned(s) && s.due <= today();
 function planFor(it, bars) {
   const due = [], n = secCount(bars); let next = null;
@@ -1637,8 +1643,10 @@ function selectSection(i, keepPrefs) {
   P.range = P.link && i > 0 ? [secRange(it, P.bars, i - 1)[0], secRange(it, P.bars, i)[1]] : secRange(it, P.bars, i);
   if (!keepPrefs && !P.link) {
     const s = normStep(it, P.bars, i, secState(it, i));
-    if (isDue(s)) { PR.hands = 'B'; PR.mode = 'along'; PR.speed = Math.max(PR.speed, 0.8); }
-    else if (!learned(s)) { const st = LADDER[s.step]; PR.hands = st.hands; PR.mode = st.mode; if (st.mode === 'along') PR.speed = st.speed; }
+    if (isDue(s)) { const rv = reviewSpec(s); PR.hands = 'B'; PR.mode = rv.mode; PR.memory = rv.memory; if (rv.mode === 'along') PR.speed = Math.max(PR.speed, 0.8); }
+    else if (!learned(s)) { const st = LADDER[s.step]; PR.hands = st.hands; PR.mode = st.mode; PR.memory = !!st.memory; if (st.mode === 'along') PR.speed = st.speed; }
+    else PR.memory = false;
+    requestAnimationFrame(sizeFall);
     saveSettings();
   }
   $('#pResult').hidden = true; renderChips(); renderPlan(); updatePUI(); renderPSheet(); dirty();
@@ -1707,10 +1715,11 @@ function updatePUI() {
   $('#pSpeed').textContent = Math.round(PR.speed * 100) + '%';
   $('#pLoop').setAttribute('aria-pressed', String(PR.loop)); $('#pNames').setAttribute('aria-pressed', String(PR.names));
   $('#pSheet').setAttribute('aria-pressed', String(PR.sheet)); $('#pClick').setAttribute('aria-pressed', String(PR.click));
-  $('#pRead').setAttribute('aria-pressed', String(PR.readFirst)); $('#pRead').disabled = PR.mode !== 'wait';
+  $('#pRead').setAttribute('aria-pressed', String(PR.readFirst)); $('#pRead').disabled = PR.mode !== 'wait' || memOn();
+  $('#pMem').setAttribute('aria-pressed', String(memOn())); $('#pMem').disabled = PR.mode !== 'wait';
   $('#pOther').setAttribute('aria-pressed', String(PR.other)); $('#pOther').disabled = PR.hands === 'B';
   $('#pClick').disabled = PR.mode !== 'along';
-  $('#pSheetBox').hidden = !PR.sheet; $('#pSplit').hidden = !PR.sheet;
+  $('#pSheetBox').hidden = !PR.sheet || memOn(); $('#pSplit').hidden = !PR.sheet || memOn();
   $('#pSheetBox').style.height = Math.round(PR.sheetH * 100) + '%';
   const running = !!P.run;
   $('#pStart').textContent = G ? '■ End session' : running && P.run.mode !== 'listen' ? '■ Stop' : 'Start';
@@ -1723,7 +1732,7 @@ function updatePUI() {
   else if (P.link) h = 'Practising ' + secLabel(P.bars, P.sec - 1) + ' and ' + secLabel(P.bars, P.sec) + ' together. Runs here don’t move the ladder; they train the join.';
   else {
     const s = normStep(P.item, P.bars, P.sec, secState(P.item, P.sec)); const lab = secLabel(P.bars, P.sec);
-    if (isDue(s)) h = 'Review due for ' + lab + ': both hands, play along, at 80% speed or faster. Pass with 90% to push the next review further out.';
+    if (isDue(s)) h = 'Review due for ' + lab + ': ' + reviewSpec(s).label + '. Pass with 90% to push the next review further out.';
     else if (learned(s)) h = lab + ' is learned. It comes back for review in ' + Math.max(1, Math.round((s.due - today()) / DAY)) + ' day(s). Playing it now is fine but doesn’t change the schedule.';
     else h = 'Step ' + (s.step + 1) + ' of ' + LADDER.length + ' for ' + lab + ': ' + LADDER[s.step].label + '. Pass with 90% clean notes to unlock the next step.';
   }
@@ -1789,7 +1798,7 @@ function startRun(listen) {
   }
   const lead = 1.6;  // seconds of falling notes before the first bar
   const now = performance.now();
-  P.run = { mode, a, b, notes, mine, auto, steps, si: 0, ai: 0, ci: 0, beats, wrong: 0, wrongAt: [], voices: [],
+  P.run = { memory: !listen && memOn(mode), mode, a, b, notes, mine, auto, steps, si: 0, ai: 0, ci: 0, beats, wrong: 0, wrongAt: [], voices: [],
     t0: a - lead * sp, perf0: now, songT: a - lead * sp, last: now, endT: steps.length ? steps[steps.length - 1].t + 0.4 : b };
   P.keyState.clear(); P.pendingGo = null; $('#pResult').hidden = true; updatePUI(); dirty();
 }
@@ -1809,7 +1818,7 @@ function tickRun() {
     if (cs && r.songT >= cs.t - 1e-9) {
       if (!cs.armed) cs.armed = now;
       // read first: reveal the falling notes after 2 wrong keys, or after waiting 3x my usual time per note
-      if (PR.readFirst && !cs.hint && ((cs.wrongHere || 0) >= 2 || now - cs.armed > hintDelay() * 1000)) { cs.hint = true; r.hints = (r.hints || 0) + 1; dirty(); }
+      if ((PR.readFirst || r.memory) && !cs.hint && ((cs.wrongHere || 0) >= 2 || now - cs.armed > hintDelay() * 1000)) { cs.hint = true; r.hints = (r.hints || 0) + 1; if (r.memory) cs.clean = false; dirty(); }
     }
     while (r.ai < r.auto.length && r.auto[r.ai].t <= r.songT) { const n = r.auto[r.ai++]; const w = c.currentTime; r.voices.push(Piano.voice(c, Piano.out, w, n.p, n.v, w + (n.off - n.t) / sp)); }
     if (r.si >= r.steps.length && r.songT >= r.endT) finishRun();
@@ -1836,7 +1845,7 @@ function practiceNoteOn(p, v, ts) {
       st.got.add(p); P.keyState.set(p, 'ok');
       if (st.got.size === st.ps.size) {
         r.si++; r.songT = Math.max(r.songT, st.t); st.notes.forEach((n) => { n.hit = true; n.ok = st.clean; });
-        if (st.armed) { st.took = (performance.now() - st.armed) / 1000; if (PR.readFirst && !st.hint) recordRT(st.took); }
+        if (st.armed) { st.took = (performance.now() - st.armed) / 1000; if (PR.readFirst && !r.memory && !st.hint) recordRT(st.took); }
       }
     } else { r.wrong++; st.clean = false; st.wrongHere = (st.wrongHere || 0) + 1; r.wrongAt.push(st.t); P.keyState.set(p, 'bad'); }
   } else {
@@ -1855,7 +1864,7 @@ function evaluate(r) {
     res.waitTotal = r.steps.reduce((x, s) => x + s.wait, 0);
     r.steps.forEach((s) => add(s.t, s.wait + (s.clean ? 0 : 1.5)));
     res.pass = res.N > 0 && res.acc >= 0.9;
-    res.readFirst = PR.readFirst; res.hints = r.hints || 0;
+    res.readFirst = PR.readFirst && !r.memory; res.memory = !!r.memory; res.hints = r.hints || 0;
     const took = r.steps.filter((x) => x.took != null && !x.hint).map((x) => x.took);
     res.perNote = took.length ? took.reduce((a, b) => a + b, 0) / took.length : null;
   } else {
@@ -1879,6 +1888,8 @@ function coachTips(res) {
     if (res.acc < 0.7) t.push('Many wrong keys. Before each chord, look at the next two or three notes and name them, then press. Wait mode waits, so slow is fine; wrong is what slows learning.');
     else if (!res.pass) t.push('Close. Play it again and aim for zero wrong keys rather than speed.');
     if (res.weakBar != null) t.push('Bar ' + (res.weakBar + 1) + ' cost you the most time. Drill that bar on its own three times, then play the whole section again.');
+    if (res.memory && res.hints && res.weakBar != null) t.push('You peeked or slipped most in bar ' + (res.weakBar + 1) + '. Look at the sheet for that bar, say its pattern out loud (for example “broken E-flat chord, then down a step”), then play it again without looking.');
+    if (res.memory && res.pass) t.push('Played from memory. Next time, try starting at a different section: being able to start anywhere is what saves you on stage.');
     if (res.readFirst && res.hints > res.N * 0.3) t.push('You needed the falling notes for ' + res.hints + ' of ' + res.N + ' notes. That’s normal at first: the daily reading drill is what speeds this up.');
     if (res.pass && res.waitTotal > res.N * 0.5) t.push('Clean, but with long pauses. Before moving on, play it once more and try to keep the notes falling without stopping.');
   } else {
@@ -1898,19 +1909,23 @@ function applyProgress(res) {
   const it = P.item; const s = normStep(it, P.bars, P.sec, secState(it, P.sec)); s.runs++; s.last = Date.now();
   if (!learned(s)) {
     const st = LADDER[s.step];
-    const matches = PR.hands === st.hands && PR.mode === st.mode && (st.mode === 'wait' || PR.speed >= st.speed - 1e-6);
+    const matches = PR.hands === st.hands && PR.mode === st.mode && memOn() === !!st.memory && (st.mode === 'wait' || PR.speed >= st.speed - 1e-6);
     if (!matches) out.msg = 'This run used other settings than step ' + (s.step + 1) + ' (' + st.label + '), so the ladder didn’t move.';
     else if (res.pass) {
       s.step++; normStep(it, P.bars, P.sec, s); out.advanced = true;
-      if (learned(s)) { s.level = 1; s.due = today() + REVIEW_DAYS[1] * DAY; out.msg = 'Section learned. It comes back for a quick review tomorrow, then after 2, 4, 7, 14 and 30 days. Those reviews are what make it stick.'; }
+      if (learned(s)) { s.level = 1; s.due = today() + REVIEW_DAYS[1] * DAY; out.msg = 'Section learned, and you know it by heart. It comes back for a quick review tomorrow, then after 2, 4, 7, 14 and 30 days, alternating from memory and play along.'; }
       else out.msg = 'Step passed. Next: ' + LADDER[s.step].label + '.';
     } else out.msg = 'Not passed yet: you need 90% for this step.';
   } else if (isDue(s)) {
-    if (PR.hands === 'B' && PR.mode === 'along' && PR.speed >= 0.8) {
-      if (res.pass) { s.level = Math.min(REVIEW_DAYS.length - 1, s.level + 1); s.due = today() + REVIEW_DAYS[s.level] * DAY; out.advanced = true; out.msg = 'Review passed. Next review in ' + REVIEW_DAYS[s.level] + ' days.'; }
-      else if (res.acc < 0.7) { s.step = 2; s.level = 0; out.msg = 'This section has faded. It goes back to step 3 (both hands, wait for me) to relearn it; that’s quicker than the first time.'; }
-      else { s.level = Math.max(1, s.level - 1); s.due = today() + DAY; out.msg = 'Not quite. It comes back tomorrow.'; }
-    } else out.msg = 'Reviews count only with both hands, play along, at 80% or faster.';
+    const rv = reviewSpec(s);
+    const ok = PR.hands === 'B' && PR.mode === rv.mode && memOn() === rv.memory && (rv.mode === 'wait' || PR.speed >= 0.8);
+    if (ok) {
+      if (res.pass) { s.level = Math.min(REVIEW_DAYS.length - 1, s.level + 1); s.due = today() + REVIEW_DAYS[s.level] * DAY; out.advanced = true; out.msg = 'Review passed. Next review in ' + REVIEW_DAYS[s.level] + ' days (' + reviewSpec(s).label + ').'; }
+      else if (res.acc < 0.7) {
+        if (rv.memory) { s.step = LADDER.length - 1; s.level = 0; out.msg = 'This section has slipped out of your memory. It goes back to the from-memory step: look at the sheet for the hard spot, then try again without it.'; }
+        else { s.step = 2; s.level = 0; out.msg = 'This section has faded. It goes back to step 3 (both hands, wait for me) to relearn it; that’s quicker than the first time.'; }
+      } else { s.level = Math.max(1, s.level - 1); s.due = today() + DAY; out.msg = 'Not quite. It comes back tomorrow.'; }
+    } else out.msg = 'This review counts only as ' + rv.label + '.';
   }
   secCommit(it, s);
   DB.put(it).catch(() => {}); renderChips(); renderPlan(); updatePUI();
@@ -1940,6 +1955,7 @@ function showResult(res, prog) {
   stat('Wrong keys', res.wrong);
   if (res.mode === 'wait') {
     stat('Time waiting', res.waitTotal.toFixed(1) + ' s');
+    if (res.memory) stat('Peeked', res.hints + ' of ' + res.N);
     if (res.readFirst) { stat('Needed falling notes', res.hints + ' of ' + res.N); if (res.perNote != null) stat('Reading time per note', res.perNote.toFixed(1) + ' s'); }
   } else { stat('Missed', res.missed); stat('Timing', (res.mean >= 0 ? '+' : '−') + Math.abs(Math.round(res.mean)) + ' ms'); stat('Steadiness', '±' + Math.round(res.sd) + ' ms'); }
   const ul = document.createElement('ul'); ul.className = 'tips';
@@ -2013,11 +2029,12 @@ function drawFall() {
   // notes
   const list = r ? r.notes : it.notes.filter((n) => n.t >= P.range[0] - 1e-6 && n.t < P.range[1] - 1e-6).map((n) => ({ ...n, hand: handOf(it, n) }));
   const mineHand = (n) => PR.hands === 'B' || n.hand === PR.hands;
-  const rf = PR.readFirst && (r ? r.mode === 'wait' : PR.mode === 'wait');
+  const mem = r ? !!r.memory : memOn();
+  const rf = (PR.readFirst || mem) && (r ? r.mode === 'wait' : PR.mode === 'wait');
   const cst = r && r.mode === 'wait' ? r.steps[r.si] : null; const hinted = !!(rf && cst && cst.hint);
   fg.textBaseline = 'bottom'; fg.textAlign = 'center';
   for (const n of list) {
-    if (rf && mineHand(n) && !(hinted && cst.notes.includes(n))) continue;   // read first: only the stuck note, and only after the hint
+    if (rf && (mineHand(n) || mem) && !(hinted && cst.notes.includes(n))) continue;   // read first: only the stuck note, and only after the hint
     const y0 = y(n.t), y1 = y(n.t + n.d); if (y1 > hitY + 40 || y0 < -10) continue;
     const x = keyX(n.p) + 1, w = keyW(n.p) - 2, top = y1, h = Math.max(4, y0 - y1);
     let col = n.hand === 'R' ? colors.accent : colors.lh, a = mineHand(n) ? 1 : 0.28;
@@ -2046,7 +2063,7 @@ function drawFall() {
   }
   if (!r && list.length && $('#pResult').hidden) {
     fg.fillStyle = colors.muted; fg.font = '15px ' + font; fg.textAlign = 'center'; fg.textBaseline = 'middle';
-    fg.fillText(rf ? 'Read first: play from the sheet music. The falling notes only appear when you get stuck.' : 'Press Start, or Listen to hear these bars first.', FW / 2, hitY * 0.35); fg.textAlign = 'left';
+    fg.fillText(mem ? 'From memory: nothing is shown. If you get stuck, the next note appears as a peek.' : rf ? 'Read first: play from the sheet music. The falling notes only appear when you get stuck.' : 'Press Start, or Listen to hear these bars first.', FW / 2, hitY * 0.35); fg.textAlign = 'left';
   }
 }
 
@@ -2088,7 +2105,7 @@ function sessionNext() {
   if (!G || !P) return;
   if (Date.now() >= G.endAt) return endSession('Time’s up.');
   const plan = planFor(P.item, P.bars);
-  if (plan.due.length) { const i = plan.due[0]; return sessionQueue('review ' + secLabel(P.bars, i), () => { G.phase = 'review'; selectSection(i); }); }
+  if (plan.due.length) { const i = plan.due[Math.floor(Math.random() * plan.due.length)]; return sessionQueue('review ' + secLabel(P.bars, i), () => { G.phase = 'review'; selectSection(i); }); }
   if (plan.next != null) {
     const i = plan.next; const st = normStep(P.item, P.bars, i, secState(P.item, i));
     return sessionQueue(secLabel(P.bars, i) + ', ' + LADDER[st.step].label.toLowerCase(), () => { if (G.sec !== i) G.fails = 0; G.sec = i; G.phase = 'learn'; selectSection(i); });
@@ -2275,6 +2292,7 @@ holdRepeat($('#pFast'), () => { if (P.run) return; PR.speed = Math.min(1.5, Math
 for (const [id, key] of [['#pLoop', 'loop'], ['#pNames', 'names'], ['#pClick', 'click'], ['#pOther', 'other']]) $(id).onclick = () => { PR[key] = !PR[key]; if (key === 'loop' && !PR.loop) P.loopToken++; saveSettings(); updatePUI(); dirty(); };
 $('#pSheet').onclick = () => { PR.sheet = !PR.sheet; saveSettings(); updatePUI(); requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); };
 $('#pStart').onclick = () => { if (G) endSession('Ended early.'); else if (P.run) stopRun(); else startRun(false); };
+$('#pMem').onclick = () => { PR.memory = !PR.memory; saveSettings(); updatePUI(); requestAnimationFrame(() => { sizeFall(); if (!memOn()) renderPSheet(); }); dirty(); };
 $('#pRead').onclick = () => { PR.readFirst = !PR.readFirst; if (PR.readFirst && !PR.sheet) { PR.sheet = true; requestAnimationFrame(() => { sizeFall(); renderPSheet(); }); } saveSettings(); updatePUI(); dirty(); };
 $('#pListen').onclick = () => { if (P.run) stopRun(); else startRun(true); };
 
