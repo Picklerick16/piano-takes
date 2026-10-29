@@ -1750,12 +1750,22 @@ function startRun(listen) {
   const mine = notes.filter((n) => mineSet.has(n));
   const auto = notes.filter((n) => !mineSet.has(n) && (listen || PR.other));
   const mode = listen ? 'listen' : PR.mode;
+  const bpb = (it.tempo && it.tempo.beats) || 4;
+  // Wait for me groups notes exactly like the sheet music does: rounded to sixteenths from the section's first bar,
+  // so what the sheet shows as one chord is what has to be played together
+  const k0 = barAt(P.bars, a), bd0 = (k0 + 1 < P.bars.length ? P.bars[k0 + 1] : it.length) - P.bars[k0];
+  const q16 = (bd0 || 2) / (bpb * 4), origin = P.bars[k0];
   const steps = [];
-  if (mode === 'wait') for (const n of mine) {
-    const last = steps[steps.length - 1];
-    if (last && n.t - last.t < 0.035) { last.ps.add(n.p); last.notes.push(n); } else steps.push({ t: n.t, ps: new Set([n.p]), got: new Set(), notes: [n], clean: true, wait: 0 });
+  if (mode === 'wait') {
+    const bySlot = new Map();
+    for (const n of mine) {
+      const slot = Math.round((n.t - origin) / q16); let st = bySlot.get(slot);
+      if (!st) { st = { t: n.t, qt: origin + slot * q16, ps: new Set(), got: new Set(), notes: [], clean: true, wait: 0 }; bySlot.set(slot, st); steps.push(st); }
+      st.t = Math.min(st.t, n.t); st.ps.add(n.p); st.notes.push(n);
+    }
+    steps.sort((x, y) => x.t - y.t);
   }
-  const beats = []; const bpb = (it.tempo && it.tempo.beats) || 4;
+  const beats = [];
   for (let k = barAt(P.bars, a); k < P.bars.length && P.bars[k] < b; k++) {
     const s0 = P.bars[k], s1 = k + 1 < P.bars.length ? P.bars[k + 1] : it.length;
     for (let j = 0; j < bpb; j++) beats.push({ t: s0 + (s1 - s0) * j / bpb, acc: j === 0 });
@@ -1932,7 +1942,7 @@ function litSheet() {
     const st = r.steps[r.si];
     if (st) {
       let best = Infinity; const near = [];
-      P.sheetMap.forEach((m, i) => { if (PR.hands !== 'B' && m.h !== PR.hands) return; const d = Math.abs(m.t - st.t); if (d <= P.sheetStep * 0.75 + 0.02) { near.push([i, d]); best = Math.min(best, d); } });
+      P.sheetMap.forEach((m, i) => { if (PR.hands !== 'B' && m.h !== PR.hands) return; const d = Math.abs(m.t - (st.qt ?? st.t)); if (d <= P.sheetStep * 0.75 + 0.02) { near.push([i, d]); best = Math.min(best, d); } });
       for (const [i, d] of near) if (d <= best + 1e-6) now.add(i);
     }
   } else if (r) P.sheetMap.forEach((m, i) => { if (m.t <= r.songT + 1e-3 && r.songT < m.end - 1e-3) now.add(i); });
