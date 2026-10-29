@@ -175,7 +175,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .chips .size output { min-width: 2.5ch; }
 .pctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-block: 8px; background: var(--panel); border-bottom: 1px solid var(--line);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.pwork { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pwork { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .psheet { flex: 0 0 auto; height: 40%; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--paper); padding: 4px 16px; position: relative; }
 /* drag handle between the sheet music and the falling notes */
 /* sheet music is for reading only: taps go through to scrolling instead of selecting notes */
@@ -186,8 +186,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .psplit.drag::before { background: var(--accent); opacity: 1; }
 .fall-wrap { flex: 1; min-height: 160px; position: relative; touch-action: none; }
 #fall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.result { position: absolute; top: 12px; right: max(12px, env(safe-area-inset-right, 0px)); width: min(400px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.22); padding: 16px; display: flex; flex-direction: column; gap: 12px; z-index: 5; }
+.result { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 32px)); max-height: calc(100% - 24px); overflow-y: auto; font-size: 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,.3); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; z-index: 5; }
 .rc-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .rc-head strong { font-size: 26px; font-variant-numeric: tabular-nums; }
 .badge { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; border: 1px solid currentColor; }
@@ -196,8 +196,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
 .stats div { display: flex; flex-direction: column; }
 .stats dt { font-size: 12px; color: var(--muted); }
 .stats dd { margin: 0; font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 600; }
-.tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; font-size: 14px; }
-.prog { margin: 0; font-size: 14px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.tips { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; font-size: 16px; }
+.prog { margin: 0; font-size: 15px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
 .result .acts { display: flex; gap: 8px; flex-wrap: wrap; }
 /* reading drill */
 .dtitle { font-size: 18px; margin: 0; }
@@ -364,7 +364,8 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
     <div class="pwork">
       <div class="psheet" id="pSheetBox" hidden><div id="pSheetOut"></div></div>
       <div class="psplit" id="pSplit" hidden role="separator" aria-orientation="horizontal" aria-label="Drag to share space between sheet music and falling notes" tabindex="0"></div>
-      <div class="fall-wrap" id="fallWrap"><canvas id="fall" aria-label="Falling notes"></canvas><div class="result" id="pResult" hidden></div></div>
+      <div class="fall-wrap" id="fallWrap"><canvas id="fall" aria-label="Falling notes"></canvas></div>
+      <div class="result" id="pResult" hidden></div>
     </div>
     <p class="hint" id="pHint"></p>
   </section>
@@ -917,11 +918,26 @@ function abcNote(p, key, state) {
 const DUR_OK = [16, 12, 8, 6, 4, 3, 2, 1];
 const DUR_ALIGN = { 16: 16, 12: 4, 8: 8, 6: 2, 4: 4, 3: 1, 2: 2, 1: 1 };
 function pickLen(pos, left) { for (const d of DUR_OK) if (d <= left && pos % DUR_ALIGN[d] === 0) return d; return 1; }
+// Places notes on a sixteenth grid (slot = sixteenths from origin). Notes of one hand that are clearly played one
+// after another (more than 60 ms apart) never share a slot, so a chord and a fast note after it don't merge
+// into one unplayable chord. Used by the sheet music and by Wait for me, so both always group notes alike.
+function slotNotes(list, origin, q) {
+  const out = new Map(); let gSlot = null, gT = 0;
+  for (const n of [...list].sort((x, y) => x.t - y.t || x.p - y.p)) {
+    let s = Math.round((n.t - origin) / q);
+    if (gSlot != null && s <= gSlot) s = n.t - gT > 0.06 ? gSlot + 1 : gSlot;
+    if (s !== gSlot) { gSlot = s; gT = n.t; }
+    out.set(n, s);
+  }
+  return out;
+}
 function buildAbc(it) {
   const tp = it.tempo; const s16 = 15 / tp.bpm; const bar = tp.beats * 4; const split = it.split || 60;
+  const hand = (n) => n.h || (n.p >= split ? 'R' : 'L');
+  const slots = new Map([...slotNotes(it.notes.filter((n) => hand(n) === 'R'), tp.offset, s16), ...slotNotes(it.notes.filter((n) => hand(n) === 'L'), tp.offset, s16)]);
   const ev = it.notes.map((n) => {
-    const on = Math.round((n.t - tp.offset) / s16); let off = Math.round((n.t + n.d - tp.offset) / s16); if (off <= on) off = on + 1;
-    return { p: n.p, on, off, h: n.h || (n.p >= split ? 'R' : 'L') };
+    const on = slots.get(n); let off = Math.round((n.t + n.d - tp.offset) / s16); if (off <= on) off = on + 1;
+    return { p: n.p, on, off, h: hand(n) };
   });
   const shift = Math.floor(Math.min(...ev.map((e) => e.on)) / bar) * bar;
   ev.forEach((e) => { e.on -= shift; e.off -= shift; });
@@ -1758,8 +1774,9 @@ function startRun(listen) {
   const steps = [];
   if (mode === 'wait') {
     const bySlot = new Map();
+    const slots = new Map([...slotNotes(notes.filter((n) => n.hand === 'R'), origin, q16), ...slotNotes(notes.filter((n) => n.hand === 'L'), origin, q16)]);
     for (const n of mine) {
-      const slot = Math.round((n.t - origin) / q16); let st = bySlot.get(slot);
+      const slot = slots.get(n); let st = bySlot.get(slot);
       if (!st) { st = { t: n.t, qt: origin + slot * q16, ps: new Set(), got: new Set(), notes: [], clean: true, wait: 0 }; bySlot.set(slot, st); steps.push(st); }
       st.t = Math.min(st.t, n.t); st.ps.add(n.p); st.notes.push(n);
     }
@@ -1774,7 +1791,7 @@ function startRun(listen) {
   const now = performance.now();
   P.run = { mode, a, b, notes, mine, auto, steps, si: 0, ai: 0, ci: 0, beats, wrong: 0, wrongAt: [], voices: [],
     t0: a - lead * sp, perf0: now, songT: a - lead * sp, last: now, endT: steps.length ? steps[steps.length - 1].t + 0.4 : b };
-  P.keyState.clear(); $('#pResult').hidden = true; updatePUI(); dirty();
+  P.keyState.clear(); P.pendingGo = null; $('#pResult').hidden = true; updatePUI(); dirty();
 }
 function stopRun() {
   if (!P || !P.run) return; P.loopToken++;
@@ -1905,7 +1922,14 @@ function finishRun() {
   const res = evaluate(r); const prog = applyProgress(res); showResult(res, prog);
   updatePUI(); dirty();
   if (G) { sessionAfterRun(res, prog); return; }
-  if (PR.loop && !prog.advanced) { const tok = ++P.loopToken; setTimeout(() => { if (P && !P.run && P.loopToken === tok && !$('#prac').hidden) startRun(false); }, 2200); }
+  if (PR.loop && !prog.advanced) {   // Loop: same countdown as a session, so the result can be read first
+    const tok = ++P.loopToken; const box = $('#pResult'); let n = 30;
+    const line = document.createElement('p'); line.className = 'prog cd'; box.appendChild(line);
+    const go = () => { if (!P || P.loopToken !== tok || P.run) return; P.pendingGo = null; box.hidden = true; startRun(false); };
+    P.pendingGo = go;
+    const tick = () => { if (!P || P.loopToken !== tok || P.run || box.hidden) return; if (n <= 0) return go(); line.textContent = 'Loop: next run starts in ' + n + ' s. Tap outside this window to start now.'; n--; setTimeout(tick, 1000); };
+    tick();
+  }
 }
 function showResult(res, prog) {
   const box = $('#pResult'); box.innerHTML = ''; const pct = (x) => Math.round(x * 100) + '%';
@@ -1914,9 +1938,10 @@ function showResult(res, prog) {
   const dl = document.createElement('dl'); dl.className = 'stats';
   const stat = (k, v) => { const d = document.createElement('div'); d.innerHTML = '<dt></dt><dd></dd>'; d.firstChild.textContent = k; d.lastChild.textContent = v; dl.appendChild(d); };
   stat('Wrong keys', res.wrong);
-  if (res.mode === 'wait') stat('Time waiting', res.waitTotal.toFixed(1) + ' s');
-  if (res.mode === 'wait' && res.readFirst) { stat('Needed falling notes', res.hints + ' of ' + res.N); if (res.perNote != null) stat('Reading time per note', res.perNote.toFixed(1) + ' s'); }
-  else { stat('Missed', res.missed); stat('Timing', (res.mean >= 0 ? '+' : '−') + Math.abs(Math.round(res.mean)) + ' ms'); stat('Steadiness', '±' + Math.round(res.sd) + ' ms'); }
+  if (res.mode === 'wait') {
+    stat('Time waiting', res.waitTotal.toFixed(1) + ' s');
+    if (res.readFirst) { stat('Needed falling notes', res.hints + ' of ' + res.N); if (res.perNote != null) stat('Reading time per note', res.perNote.toFixed(1) + ' s'); }
+  } else { stat('Missed', res.missed); stat('Timing', (res.mean >= 0 ? '+' : '−') + Math.abs(Math.round(res.mean)) + ' ms'); stat('Steadiness', '±' + Math.round(res.sd) + ' ms'); }
   const ul = document.createElement('ul'); ul.className = 'tips';
   for (const tip of coachTips(res)) { const li = document.createElement('li'); li.textContent = tip; ul.appendChild(li); }
   box.append(head, dl, ul);
@@ -1928,7 +1953,7 @@ function showResult(res, prog) {
   else if (prog.advanced && s && learned(s)) { const p = planFor(P.item, P.bars); if (p.due.length || p.next != null) btn('Next in today’s plan', () => selectSection(p.due[0] ?? p.next), 'primary'); }
   btn('Again', () => startRun(false), prog.advanced ? '' : 'primary');
   if (res.weakBar != null && P.drill == null) btn('Drill bar ' + (res.weakBar + 1), () => drillBar(res.weakBar));
-  btn('Close', () => { box.hidden = true; });
+  btn('Close', () => closeResult());
   box.appendChild(acts); box.hidden = false;
 }
 
@@ -2026,6 +2051,14 @@ function drawFall() {
 }
 
 
+
+// closing the result window (Close, or a tap outside it): starts the next run if one is waiting, else just hides it
+function closeResult() { const go = P && P.pendingGo; if (P) P.pendingGo = null; if (go) go(); $('#pResult').hidden = true; }
+document.addEventListener('pointerdown', (e) => {
+  const box = $('#pResult'); if (!P || box.hidden || $('#prac').hidden) return;
+  if (box.contains(e.target) || e.target.closest('button, .chip, .psplit')) return;
+  closeResult();
+}, true);
 /* ---------------- practice log ---------------- */
 const dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 function logMinutes(m) { if (!(m > 0.2)) return; const k = dayKey(); settings.log[k] = Math.round(((settings.log[k] || 0) + m) * 10) / 10; saveSettings(); }
@@ -2063,15 +2096,17 @@ function sessionNext() {
   endSession('Every section is learned and nothing is due.');
 }
 // shows what comes next with a short countdown, then starts it (or "Start now")
-function sessionQueue(label, action, secs = 4) {
+function sessionQueue(label, action, secs) {
   const tok = ++G.token; const box = $('#pResult');
+  if (secs == null) secs = box.hidden ? 4 : 30;   // time to read the result before the next run starts
   if (box.hidden) { box.innerHTML = ''; box.hidden = false; }
   const old = box.querySelector('.acts:not(.sacts)'); if (old) old.remove();
   let line = box.querySelector('.cd'); if (!line) { line = document.createElement('p'); line.className = 'prog cd'; box.appendChild(line); }
   let bar = box.querySelector('.sacts');
   if (!bar) { bar = document.createElement('div'); bar.className = 'acts sacts'; bar.innerHTML = '<button class="primary" data-go>Start now</button><button data-end>End session</button>'; box.appendChild(bar); }
   let n = secs;
-  const go = () => { if (!G || G.token !== tok) return; G.token++; action(); $('#pResult').hidden = true; if (G) startRun(false); };
+  const go = () => { if (!G || G.token !== tok) return; G.token++; P.pendingGo = null; action(); $('#pResult').hidden = true; if (G) startRun(false); };
+  P.pendingGo = go;
   bar.querySelector('[data-go]').onclick = go;
   bar.querySelector('[data-end]').onclick = () => endSession('Ended early.');
   const tick = () => { if (!G || G.token !== tok) return; if (n <= 0) return go(); line.textContent = 'Next: ' + label + ' · starts in ' + n + ' s'; n--; setTimeout(tick, 1000); };
