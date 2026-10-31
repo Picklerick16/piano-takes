@@ -496,12 +496,24 @@ const Piano = (() => {
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); load();
     }
+    if (ctx.state === 'closed') revive();
     if (ctx.state !== 'running') {
       ctx.resume().catch(() => {});
+      // iPadOS sometimes leaves the sound engine "interrupted" after sleep or an app switch and never resumes it:
+      // if it still isn't running shortly after a tap, replace it with a fresh one (loaded sounds are kept)
+      const stuck = ctx; setTimeout(() => { if (ctx === stuck && ctx.state !== 'running') { revive(); onRevive && onRevive(); } }, 500);
       // iOS only unlocks audio once something actually plays inside a tap
       try { const b = ctx.createBuffer(1, 1, 22050); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) {}
     }
     return ctx;
+  }
+  let onRevive = null;
+  function revive() {
+    const old = ctx; try { old && old.close(); } catch (e) {}
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx);
+    ctx.resume().catch(() => {});
+    try { const b = ctx.createBuffer(1, 1, 22050); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) {}
   }
   function decode(ab) { return new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); }); }
   function load() {
@@ -544,8 +556,13 @@ const Piano = (() => {
     g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(accent ? 0.35 : 0.22, when + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
     o.connect(g); g.connect(out); o.start(when); o.stop(when + 0.06);
   }
-  return { ensure, voice, release, click, load: () => (ensure(), loadP), get ctx() { return ctx; }, get out() { return out; }, makeOut };
+  return { ensure, voice, release, click, revive, set onRevive(f) { onRevive = f; }, load: () => (ensure(), loadP), get ctx() { return ctx; }, get out() { return out; }, makeOut };
 })();
+// after a fresh sound engine replaces a stuck one, restart whatever was playing on the new one
+Piano.onRevive = () => {
+  if (play) { const f = play.from, t = play.to, r = play.returnTo; clearInterval(play.timer); play = null; startPlayback(f, t, r); toast('Sound restarted.'); }
+  else if (P && P.run && P.run.mode !== 'wait') { stopRun(); toast('Sound restarted. Press Start again.'); }
+};
 // iOS only allows audio to start from a tap, and can suspend it again later (calls, other apps), so retry on every tap
 for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) window.addEventListener(ev, () => { try { if (!Piano.ctx || Piano.ctx.state !== 'running') Piano.ensure(); } catch (e) {} }, true);
 
