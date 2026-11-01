@@ -286,7 +286,6 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
         </div>
       </div>
       <button id="noteEditBtn" class="toggle" aria-pressed="false" title="When on, tap a note to select it, then change its length or delete it">✎ Edit notes</button>
-      <button id="monitorBtn" class="toggle" aria-pressed="false" title="Also play the iPad piano sound while you play">iPad sound</button>
       <span class="grow"></span>
       <button id="undoBtn" class="sq" aria-label="Undo" title="Undo">↶</button>
       <button id="redoBtn" class="sq" aria-label="Redo" title="Redo">↷</button>
@@ -1063,7 +1062,8 @@ function onMidi(e) {
 function noteOn(p, v, ts) {
   if (live.has(p)) noteOff(p, ts);
   live.set(p, v);
-  if (settings.monitor) { const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.out, c.currentTime, p, v, c.currentTime + 30)); }
+  { // the iPad always sounds the keys played on the piano
+    const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.out, c.currentTime, p, v, c.currentTime + 30)); }
   if (rec && (rec.state === 'rec' || rec.state === 'countin')) rec.held.set(p, { p, v, t: Math.max(rec.base, recTime(ts)) });
   if (P && P.run) practiceNoteOn(p, v, ts);
   if (D && D.active) drillNoteOn(p);
@@ -1260,7 +1260,6 @@ function updateUI() {
   $('#countOn').setAttribute('aria-pressed', String(settings.countIn));
   $('#bpmOut').textContent = settings.bpm;
   $$('#beatsSeg button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.b === settings.beats)));
-  $('#monitorBtn').setAttribute('aria-pressed', String(settings.monitor));
   $$('#stepSeg button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.step === settings.step)));
   $$('#snapSeg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.snap === settings.snap)));
   $('#snapSeg [data-snap="beats"]').disabled = !it.tempo;
@@ -2412,7 +2411,6 @@ $$('#stepSeg button').forEach((b) => (b.onclick = () => { settings.step = +b.dat
 $$('#snapSeg button').forEach((b) => (b.onclick = () => { settings.snap = b.dataset.snap; saveSettings(); updateUI(); }));
 $('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
 $('#zoomIn').onclick = () => zoomBy(1.6); $('#zoomOut').onclick = () => zoomBy(1 / 1.6); $('#zoomFit').onclick = zoomFit;
-$('#monitorBtn').onclick = () => { settings.monitor = !settings.monitor; saveSettings(); if (settings.monitor) Piano.ensure(); updateUI(); };
 $('#sheetToggle').onclick = () => { cur.item.sheet = !cur.item.sheet; save(); updateUI(); requestAnimationFrame(() => { sizeCanvas(); renderSheet(); }); };
 // menus
 function toggleMenu(btn, menu) {
