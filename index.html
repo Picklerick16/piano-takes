@@ -490,6 +490,8 @@ const Piano = (() => {
     return Math.max(0, i / b.sampleRate - 0.001);
   }
   // live playing skips the limiter: its look-ahead adds a few milliseconds of delay
+  // ask for the smallest sound buffer the device allows (falls back to the 'interactive' preset)
+  function newCtx() { const AC = window.AudioContext || window.webkitAudioContext; try { return new AC({ latencyHint: 0 }); } catch (e) { return new AC({ latencyHint: 'interactive' }); } }
   function makeLive(c) { const g = c.createGain(); g.gain.value = 0.55; g.connect(c.destination); return g; }
   const buffers = new Map();
   const SAMPLES = []; for (let m = 21; m <= 108; m += 3) SAMPLES.push(m);
@@ -504,8 +506,7 @@ const Piano = (() => {
     // 'playback' makes iPadOS play web audio even when the device is in silent mode
     try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
     if (!ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); live = makeLive(ctx); load();
+      ctx = newCtx(); out = makeOut(ctx); live = makeLive(ctx); load();
     }
     if (ctx.state === 'closed') revive();
     if (ctx.state !== 'running') {
@@ -521,8 +522,7 @@ const Piano = (() => {
   let onRevive = null;
   function revive() {
     const old = ctx; try { old && old.close(); } catch (e) {}
-    const AC = window.AudioContext || window.webkitAudioContext;
-    ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); live = makeLive(ctx);
+    ctx = newCtx(); out = makeOut(ctx); live = makeLive(ctx);
     ctx.resume().catch(() => {});
     try { const b = ctx.createBuffer(1, 1, 22050); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) {}
   }
@@ -2403,7 +2403,10 @@ function syncMonitorBtns() { $$('[data-monitor]').forEach((b) => b.setAttribute(
 $$('[data-monitor]').forEach((b) => (b.onclick = () => {
   settings.monitor = !settings.monitor; saveSettings(); syncMonitorBtns();
   if (!settings.monitor) { const c = Piano.ctx; for (const vc of monitorVoices.values()) if (c) Piano.release(vc, c.currentTime); monitorVoices.clear(); pedalHeld.clear(); toast('iPad sound off: only the piano sounds.'); }
-  else { const c = Piano.ensure(); const ms = Math.round(((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000); toast('iPad sound on' + (ms ? ' (iPad output delay about ' + ms + ' ms)' : '') + '.'); }
+  else {
+    const c = Piano.ensure(); const b = Math.round((c.baseLatency || 0) * 1000), o = Math.round((c.outputLatency || 0) * 1000);
+    toast('iPad sound on. Delay: ' + (b + o) + ' ms (sound engine ' + b + ' ms + iPad output ' + o + ' ms).', 7000);
+  }
 }));
 syncMonitorBtns();
 $('#back').onclick = closeSession;
