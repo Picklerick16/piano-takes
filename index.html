@@ -223,6 +223,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
     <header class="bar">
       <h1>Piano Takes</h1>
       <span class="grow"></span>
+      <button class="toggle" data-monitor aria-pressed="true" title="Also play the keys you press on the piano through the iPad">🔊 iPad sound</button>
       <span class="pill" data-midi-pill>Checking for MIDI…</span>
     </header>
     <div class="lib-body">
@@ -253,6 +254,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <button id="back" class="ghost">‹ Library</button>
       <input id="title" aria-label="Recording name" autocomplete="off" spellcheck="false">
       <span class="grow"></span>
+      <button class="toggle" data-monitor aria-pressed="true" title="Also play the keys you press on the piano through the iPad">🔊 iPad sound</button>
       <span class="pill" data-midi-pill></span>
       <button id="practiceBtn">Practice</button>
       <button id="sheetToggle" class="toggle" aria-pressed="false">Sheet music</button>
@@ -341,6 +343,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <button id="pBack" class="ghost">‹ Library</button>
       <div class="ptitle" id="pTitle"></div>
       <span class="grow"></span>
+      <button class="toggle" data-monitor aria-pressed="true" title="Also play the keys you press on the piano through the iPad">🔊 iPad sound</button>
       <span class="pill" data-midi-pill></span>
       <button id="pEdit">Open in editor</button>
     </header>
@@ -375,6 +378,7 @@ output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-
       <button id="dBack" class="ghost">‹ Back</button>
       <h1 class="dtitle">Reading drill</h1>
       <span class="grow"></span>
+      <button class="toggle" data-monitor aria-pressed="true" title="Also play the keys you press on the piano through the iPad">🔊 iPad sound</button>
       <span class="pill" data-midi-pill></span>
     </header>
     <div class="dbody">
@@ -421,7 +425,7 @@ const LS = {
   get(k, d) { try { const v = localStorage.getItem('pianotakes.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('pianotakes.' + k, JSON.stringify(v)); } catch (e) {} },
 };
-const settings = Object.assign({ metro: false, bpm: 90, beats: 4, countIn: true, monitor: false, snap: 'free', step: 0.01 }, LS.get('settings', {}));
+const settings = Object.assign({ metro: false, bpm: 90, beats: 4, countIn: true, monitor: true, snap: 'free', step: 0.01 }, LS.get('settings', {}));
 const saveSettings = () => LS.set('settings', settings);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -478,7 +482,15 @@ try { navigator.storage && navigator.storage.persist && navigator.storage.persis
 
 /* ---------------- piano sound ---------------- */
 const Piano = (() => {
-  let ctx = null, out = null, loadP = null;
+  let ctx = null, out = null, live = null, loadP = null;
+  const onsets = new Map();   // where each sample's sound actually starts, in seconds (skips the MP3's silent lead-in)
+  function onsetOf(b) {
+    const d = b.getChannelData(0); let peak = 0; for (let i = 0; i < Math.min(d.length, b.sampleRate); i++) peak = Math.max(peak, Math.abs(d[i]));
+    let i = 0; while (i < d.length && Math.abs(d[i]) < peak * 0.01) i++;
+    return Math.max(0, i / b.sampleRate - 0.001);
+  }
+  // live playing skips the limiter: its look-ahead adds a few milliseconds of delay
+  function makeLive(c) { const g = c.createGain(); g.gain.value = 0.55; g.connect(c.destination); return g; }
   const buffers = new Map();
   const SAMPLES = []; for (let m = 21; m <= 108; m += 3) SAMPLES.push(m);
   const PC = { 0: 'C', 3: 'Ds', 6: 'Fs', 9: 'A' };
@@ -493,7 +505,7 @@ const Piano = (() => {
     try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
-      ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); load();
+      ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); live = makeLive(ctx); load();
     }
     if (ctx.state === 'closed') revive();
     if (ctx.state !== 'running') {
@@ -510,7 +522,7 @@ const Piano = (() => {
   function revive() {
     const old = ctx; try { old && old.close(); } catch (e) {}
     const AC = window.AudioContext || window.webkitAudioContext;
-    ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx);
+    ctx = new AC({ latencyHint: 'interactive' }); out = makeOut(ctx); live = makeLive(ctx);
     ctx.resume().catch(() => {});
     try { const b = ctx.createBuffer(1, 1, 22050); const s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) {}
   }
@@ -518,7 +530,7 @@ const Piano = (() => {
   function load() {
     if (loadP) return loadP;
     loadP = Promise.all(SAMPLES.map((m) => fetch(sampleUrl(m)).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-      .then(decode).then((b) => buffers.set(m, b)).catch(() => {})))
+      .then(decode).then((b) => { buffers.set(m, b); onsets.set(m, onsetOf(b)); }).catch(() => {})))
       .then(() => { if (buffers.size < SAMPLES.length) toast('Some piano sounds could not load. A simple tone is used instead.'); });
     return loadP;
   }
@@ -543,7 +555,8 @@ const Piano = (() => {
     src.connect(f);
     const relAt = Math.max(off, when + 0.03);
     g.gain.setTargetAtTime(0, relAt, rel);
-    src.start(when); src.stop(relAt + rel * 8);
+    if (buf) src.start(when, onsets.get(s) || 0); else src.start(when);
+    src.stop(relAt + rel * 8);
     return { src, g, end: relAt + rel * 8, rel };
   }
   function release(vc, at) {
@@ -555,7 +568,7 @@ const Piano = (() => {
     g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(accent ? 0.35 : 0.22, when + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
     o.connect(g); g.connect(out); o.start(when); o.stop(when + 0.06);
   }
-  return { ensure, voice, release, click, revive, set onRevive(f) { onRevive = f; }, load: () => (ensure(), loadP), get ctx() { return ctx; }, get out() { return out; }, makeOut };
+  return { ensure, voice, release, click, revive, set onRevive(f) { onRevive = f; }, load: () => (ensure(), loadP), get ctx() { return ctx; }, get out() { return out; }, get liveOut() { return live; }, makeOut };
 })();
 // after a fresh sound engine replaces a stuck one, restart whatever was playing on the new one
 Piano.onRevive = () => {
@@ -1062,8 +1075,8 @@ function onMidi(e) {
 function noteOn(p, v, ts) {
   if (live.has(p)) noteOff(p, ts);
   live.set(p, v);
-  { // the iPad always sounds the keys played on the piano
-    const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.out, c.currentTime, p, v, c.currentTime + 30)); }
+  if (settings.monitor) { // the iPad sounds the keys played on the piano, through the fastest path
+    const c = Piano.ensure(); const old = monitorVoices.get(p); if (old) Piano.release(old, c.currentTime); monitorVoices.set(p, Piano.voice(c, Piano.liveOut, c.currentTime, p, v, c.currentTime + 30)); }
   if (rec && (rec.state === 'rec' || rec.state === 'countin')) rec.held.set(p, { p, v, t: Math.max(rec.base, recTime(ts)) });
   if (P && P.run) practiceNoteOn(p, v, ts);
   if (D && D.active) drillNoteOn(p);
@@ -2383,6 +2396,16 @@ $('#dBack').onclick = () => {
   const inSession = D && D.onDone; if (D) { D.onDone = null; if (D.active) drillFinish(); } D = null;
   if (inSession && P) { endSession('Ended early.'); showScreen('prac'); requestAnimationFrame(sizeFall); } else { showScreen('lib'); loadLibrary(); }
 };
+
+// iPad sound for live playing: on by default (switched on once for everyone who had the old toggle off)
+if (!settings.monitorV2) { settings.monitor = true; settings.monitorV2 = true; saveSettings(); }
+function syncMonitorBtns() { $$('[data-monitor]').forEach((b) => b.setAttribute('aria-pressed', String(!!settings.monitor))); }
+$$('[data-monitor]').forEach((b) => (b.onclick = () => {
+  settings.monitor = !settings.monitor; saveSettings(); syncMonitorBtns();
+  if (!settings.monitor) { const c = Piano.ctx; for (const vc of monitorVoices.values()) if (c) Piano.release(vc, c.currentTime); monitorVoices.clear(); pedalHeld.clear(); toast('iPad sound off: only the piano sounds.'); }
+  else { const c = Piano.ensure(); const ms = Math.round(((c.baseLatency || 0) + (c.outputLatency || 0)) * 1000); toast('iPad sound on' + (ms ? ' (iPad output delay about ' + ms + ' ms)' : '') + '.'); }
+}));
+syncMonitorBtns();
 $('#back').onclick = closeSession;
 $('#title').onchange = () => { cur.item.name = $('#title').value.trim() || 'Untitled'; save(); renderSheetSoon(); };
 $('#title').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
